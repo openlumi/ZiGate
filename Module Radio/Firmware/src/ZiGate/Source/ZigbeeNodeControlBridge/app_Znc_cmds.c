@@ -68,6 +68,7 @@
 #include "zps_apl_aib.h"
 #include "zps_apl_af.h"
 #include "zps_nwk_nib.h"
+#include "zps_struct.h"
 #include "app_common.h"
 #include "app_Znc_cmds.h"
 #include "Log.h"
@@ -88,6 +89,8 @@
 #ifdef CLD_OTA
 #include "app_ota_server.h"
 #endif
+
+
 /****************************************************************************/
 /***    Macro Definitions                         ***/
 /****************************************************************************/
@@ -97,7 +100,7 @@
 #endif
 
 #ifndef VERSION
-#define VERSION    0x0003031c
+#define VERSION    0x0003031d
 #endif
 /****************************************************************************/
 /***    Type Definitions                          ***/
@@ -137,7 +140,7 @@ PRIVATE ZPS_teStatus APP_eZdpPowerDescReq ( uint16    u16Addr,
 
 PRIVATE ZPS_teStatus APP_eZdpSimpleDescReq ( uint16    u16Addr,
                                              uint8     u8Endpoint,
-                                             uint8*    pu8Seq );
+                                             uint8*    pu8Seq);
 
 PRIVATE ZPS_teStatus APP_eZdpActiveEndpointReq ( uint16    u16Addr,
                                                  uint8*    pu8Seq );
@@ -165,7 +168,8 @@ PRIVATE ZPS_teStatus APP_eZdpNwkAddrReq ( uint16    u16Dst,
 PRIVATE ZPS_teStatus APP_eZdpPermitJoiningReq ( uint16    u16DstAddr,
                                                 uint8     u8PermitDuration,
                                                 bool      bTcSignificance,
-                                                uint8*    pu8Seq );
+                                                uint8*    pu8Seq,
+                                                uint8*    pu8RequestSent);
 
 PRIVATE ZPS_teStatus APP_eBindUnbindEntry ( bool_t         bBind,
                                             uint64         u64SrcAddr,
@@ -174,7 +178,8 @@ PRIVATE ZPS_teStatus APP_eBindUnbindEntry ( bool_t         bBind,
                                             ZPS_tuAddress  *puDstAddress,
                                             uint8          u8DstEndpoint,
                                             uint8          u8DstAddrMode,
-                                            uint8          *pu8Seq );
+                                            uint8          *pu8Seq,
+                                            uint8*         pu8SeqMask);
 
 PRIVATE ZPS_teStatus APP_eZdpComplexDescReq ( uint16    u16Addr,
                                               uint16    u16NwkAddressInterst,
@@ -307,7 +312,9 @@ PUBLIC  teZCL_Status  APP_eSendWriteAttributesRequest ( uint8            u8Sourc
                                                         uint16           u16ManufacturerCode,
                                                         uint8            *pu8AttributeRequestList,
                                                         uint8            u8NumberOfAttrib,
-                                                        uint16           u16SizePayload );
+                                                        uint16           u16SizePayload,
+                                                        uint8            u8CommandId,
+                                                        uint8            *pu8SeqApsNum);
 
 /****************************************************************************/
 /***    Implementation                          */
@@ -315,11 +322,13 @@ PUBLIC  teZCL_Status  APP_eSendWriteAttributesRequest ( uint8            u8Sourc
 
 PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
 {
-    uint8                  u8SeqNum = 0;
+    uint8                  u8SeqNum = 0; // this contains now the APP (zcl, zdp)  sequence number
+    uint8                  u8SeqApsNum = 0; // this contains the aps sequence number
+    uint8                  u8RequestSent = 0; // this contains an explanation of the previous two content , 0 : no aps sqn , no app sqn, 1 : aps sqn , 2 both are filled
     uint8                  u8Status = 0;
     uint16                 u16TargetAddress;
     tsZCL_Address          sAddress;
-    uint8                  au8values[4];
+    uint8                  au8values[6];
     uint8                  u8Length = 0;
 #ifdef FULL_FUNC_DEVICE
     tsBDB_ZCLEvent         sEvent;
@@ -340,9 +349,11 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
             u32AHIresponse = APP_vCMDHandleAHICommand(u16PacketType, u16PacketLength, au8LinkRxBuffer, &u8Status);
             if (u16PacketType == E_SL_MSG_AHI_GET_TX_POWER || u16PacketType == E_SL_MSG_AHI_SET_TX_POWER)
             {
-                ZNC_BUF_U8_UPD  ( &au8values[ 0 ], u8Status,      u8Length );
-                ZNC_BUF_U8_UPD  ( &au8values[ 1 ], u8SeqNum,      u8Length );
-                ZNC_BUF_U16_UPD ( &au8values[ 2 ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8Status,      u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqNum,      u8Length );
+                ZNC_BUF_U16_UPD ( &au8values[ u8Length ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8RequestSent, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqApsNum,   u8Length );
                 vSL_WriteMessage ( E_SL_MSG_STATUS,
                                    u8Length,
                                    au8values,
@@ -402,9 +413,13 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
             {
                 uint32     u32Version = VERSION;
 
-                ZNC_BUF_U8_UPD  ( &au8values[ 0 ], u8Status,      u8Length );
-                ZNC_BUF_U8_UPD  ( &au8values[ 1 ], u8SeqNum,      u8Length );
-                ZNC_BUF_U16_UPD ( &au8values[ 2 ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8Status,      u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqNum,      u8Length );
+                ZNC_BUF_U16_UPD ( &au8values[ u8Length ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8RequestSent, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqApsNum,   u8Length );
+
+
                 vSL_WriteMessage ( E_SL_MSG_STATUS,
                                    u8Length,
                                    au8values,
@@ -483,9 +498,13 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
             {
                 uint32    u32Value = sControlBridge.sTimeServerCluster.utctTime;
 
-                ZNC_BUF_U8_UPD  ( &au8values[ 0 ], u8Status,      u8Length );
-                ZNC_BUF_U8_UPD  ( &au8values[ 1 ], u8SeqNum,      u8Length );
-                ZNC_BUF_U16_UPD ( &au8values[ 2 ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8Status,      u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqNum,      u8Length );
+                ZNC_BUF_U16_UPD ( &au8values[ u8Length ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8RequestSent, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqApsNum,   u8Length );
+
+
                 vSL_WriteMessage ( E_SL_MSG_STATUS,
                                    u8Length,
                                    au8values,
@@ -518,9 +537,13 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
             case (E_SL_MSG_GET_DISPLAY_ADDRESS_MAP_TABLE):
             {
 
-                ZNC_BUF_U8_UPD  ( &au8values[ 0 ], u8Status,      u8Length );
-                ZNC_BUF_U8_UPD  ( &au8values[ 1 ], u8SeqNum,      u8Length );
-                ZNC_BUF_U16_UPD ( &au8values[ 2 ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values [u8Length ], u8Status,      u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqNum,      u8Length );
+                ZNC_BUF_U16_UPD ( &au8values[ u8Length ], u16PacketType, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8RequestSent, u8Length );
+                ZNC_BUF_U8_UPD  ( &au8values[ u8Length ], u8SeqApsNum,   u8Length );
+
+
                 vSL_WriteMessage ( E_SL_MSG_STATUS,
                                    u8Length,
                                    au8values,
@@ -858,6 +881,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                       &au8LinkRxBuffer[12],
                                                                                       u8DataLength,
                                                                                       &u8SeqNum );
+              //  function ZPS_eAplAfApsdeDataReq does not request an ack hence seqnum is useless
+              //  u8RequestSent = 1;
             }
             break;
 
@@ -871,6 +896,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u8Status    =  APP_eZdpComplexDescReq ( u16TargetAddress,
                                                         u16PayloadAddress,
                                                         &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -910,7 +936,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                       u8OutClusterCount,
                                                       au16OutClusterList,
                                                       &u8SeqNum );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -921,6 +947,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                u16TargetAddress    =  ZNC_RTN_U16 ( au8LinkRxBuffer, 0 );
                u8Status            =  APP_eZdpNodeDescReq ( u16TargetAddress,
                                                             &u8SeqNum );
+               u8RequestSent = 1;
             }
             break;
 
@@ -933,6 +960,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u8Status            =  APP_eZdpSimpleDescReq ( u16TargetAddress,
                                                                u8Endpoint,
                                                                &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -948,8 +976,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u8Status    =  APP_eZdpPermitJoiningReq ( u16TargetAddress,
                                                           au8LinkRxBuffer[2],
                                                           au8LinkRxBuffer[3],
-                                                          &u8SeqNum );
-
+                                                          &u8SeqNum,
+                                                          &u8RequestSent );
             }
             break;
 
@@ -959,6 +987,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u16TargetAddress    =  ZNC_RTN_U16 ( au8LinkRxBuffer, 0 );
                 u8Status            =  APP_eZdpPowerDescReq ( u16TargetAddress,
                                                               &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -968,6 +997,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u16TargetAddress    =  ZNC_RTN_U16 ( au8LinkRxBuffer, 0 );
                 u8Status            =  APP_eZdpActiveEndpointReq ( u16TargetAddress,
                                                                &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -990,6 +1020,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                   u8ScanCount,
                                                                   &u8SeqNum,
                                                                   u16NwkManagerAddr);
+                u8RequestSent = 1;
             }
             break;
 
@@ -1002,6 +1033,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
 
                 u8Status        =  APP_eZdpSystemServerDiscovery ( u16ServerMask,
                                                                &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1019,6 +1051,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                          au8LinkRxBuffer[4],
                                                          au8LinkRxBuffer[5],
                                                          &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1034,6 +1067,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                  au8LinkRxBuffer[10],
                                                  au8LinkRxBuffer[11],
                                                  &u8SeqNum);
+                u8RequestSent = 1;
             }
             break;
 
@@ -1047,6 +1081,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                u8Status            = APP_eZdpMgmtLqiRequest ( u16TargetAddress,
                                                               u8StartIndex,
                                                               &u8SeqNum );
+               u8RequestSent = 1;
 
             }
             break;
@@ -1084,7 +1119,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                       &uDstAddress,
                                                       u8DstEp,
                                                       u8DstAddrMode,
-                                                      &u8SeqNum );
+                                                      &u8SeqNum,
+                                                      &u8RequestSent);
             }
             break;
 
@@ -1100,6 +1136,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                    au8LinkRxBuffer[10],
                                                    au8LinkRxBuffer[11],
                                                    &u8SeqNum );
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -1115,6 +1153,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                            &au8LinkRxBuffer[5],
                                                            au8LinkRxBuffer[4],
                                                            &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1128,6 +1167,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 u8Status    =  APP_eZdpUserDescReq ( u16TargetAddress,
                                                      u16AddrInterest,
                                                      &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
             case E_SL_MSG_MANY_TO_ONE_ROUTE_REQUEST:
@@ -1152,6 +1192,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                       &sAddress,
                                                                       &u8SeqNum,
                                                                       &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1166,6 +1207,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                       &sAddress,
                                                                       &u8SeqNum,
                                                                       &sRequest);
+                u8RequestSent = 1;
             }
             break;
 
@@ -1181,6 +1223,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                         au8LinkRxBuffer [ 4 ],
                                                                         &sAddress,
                                                                         &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1198,6 +1241,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                  &sAddress,
                                                                                  &u8SeqNum,
                                                                                  &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1211,6 +1255,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                         &sAddress,
                                                                         &u8SeqNum,
                                                                         &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1234,6 +1279,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                  &sAddress,
                                                                                  &u8SeqNum,
                                                                                  &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1265,6 +1311,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                        &sAddress,
                                                                        &u8SeqNum,
                                                                        &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1279,6 +1326,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                      &sAddress,
                                                                                      &u8SeqNum,
                                                                                      &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1293,6 +1341,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                    &sAddress,
                                                                                    &u8SeqNum,
                                                                                    &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1307,6 +1356,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                          &sAddress,
                                                                                          &u8SeqNum,
                                                                                          &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1321,6 +1371,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                           &sAddress,
                                                                           &u8SeqNum,
                                                                           &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1335,6 +1386,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                           &sAddress,
                                                                           &u8SeqNum,
                                                                           &sRequest );
+
             }
             break;
 #ifdef  CLD_SCENES_CMD_ENHANCED_ADD_SCENE
@@ -1353,6 +1405,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                &sAddress,
                                                                                &u8SeqNum,
                                                                                &sRequest );
+                u8RequestSent = 1;
+
             }
             break;
 #endif
@@ -1369,6 +1423,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                &sAddress,
                                                                                &u8SeqNum,
                                                                                &sRequest );
+                u8RequestSent = 1;
+
             }
             break;
 #endif
@@ -1388,6 +1444,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                              &sAddress,
                                                                              &u8SeqNum,
                                                                              &sRequest );
+                u8RequestSent = 1;
             }
             break;
 #endif
@@ -1401,6 +1458,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                             &sAddress,
                                                                                             &u8SeqNum,
                                                                                             &sRequest);
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -1417,6 +1476,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                      &sAddress,
                                                                                      &u8SeqNum,
                                                                                      &sRequest );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1427,6 +1487,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                    &sAddress,
                                                    &u8SeqNum,
                                                    au8LinkRxBuffer [ 5 ] );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1444,6 +1505,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                      &sAddress,
                                                                      &u8SeqNum,
                                                                      &sRequest );
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -1461,7 +1524,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                              &sAddress,
                                                                              &u8SeqNum,
                                                                              &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1478,6 +1541,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                             &sAddress,
                                                                                             &u8SeqNum,
                                                                                             &sPayload );
+                u8RequestSent = 1;
 
             }
             break;
@@ -1495,7 +1559,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                &sAddress,
                                                                                &u8SeqNum,
                                                                                &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1512,7 +1576,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                               &sAddress,
                                                                               &u8SeqNum,
                                                                               &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1528,7 +1592,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                       &sAddress,
                                                                                       &u8SeqNum,
                                                                                       &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1544,7 +1608,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                      &sAddress,
                                                                                      &u8SeqNum,
                                                                                      &sPayload );
-
+                 u8RequestSent = 1;
             }
             break;
 
@@ -1561,6 +1625,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                     &sAddress,
                                                                                     &u8SeqNum,
                                                                                     &sPayload );
+                u8RequestSent = 1;
 
             }
             break;
@@ -1579,6 +1644,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                   &sAddress,
                                                                                   &u8SeqNum,
                                                                                   &sPayload );
+                u8RequestSent = 1;
 
             }
             break;
@@ -1595,7 +1661,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                 &sAddress,
                                                                                 &u8SeqNum,
                                                                                 &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1612,7 +1678,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                             &sAddress,
                                                                             &u8SeqNum,
                                                                             &sPayload );
-
+                u8RequestSent = 1;
             }
             break;
 
@@ -1630,6 +1696,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                &sAddress,
                                                                                &u8SeqNum,
                                                                                &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1644,6 +1711,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                              &sAddress,
                                                                                              &u8SeqNum,
                                                                                              &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1661,6 +1729,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                            &sAddress,
                                                                                            &u8SeqNum,
                                                                                            &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1681,6 +1750,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                            &sAddress,
                                                                                            &u8SeqNum,
                                                                                            &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1698,6 +1768,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                        &sAddress,
                                                                                        &u8SeqNum,
                                                                                        &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1713,6 +1784,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                      &sAddress,
                                                                                      &u8SeqNum,
                                                                                      &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1729,6 +1801,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                      &sAddress,
                                                                                      &u8SeqNum,
                                                                                      &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1747,6 +1820,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                                     &sAddress,
                                                                                                     &u8SeqNum,
                                                                                                     &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1762,6 +1836,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                   &sAddress,
                                                                                   &u8SeqNum,
                                                                                   &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1778,6 +1853,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                             &u8SeqNum,
                                                                             au8LinkRxBuffer [ 5 ],
                                                                             &sCommand);
+                u8RequestSent = 1;
             }
             break;
 
@@ -1793,6 +1869,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                          &u8SeqNum,
                                                                          au8LinkRxBuffer [ 5 ],
                                                                          &sCommand );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1810,6 +1887,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                          &u8SeqNum,
                                                                          au8LinkRxBuffer [ 5 ],
                                                                          &sCommand );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1826,6 +1904,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                      &u8SeqNum,
                                                                      au8LinkRxBuffer [ 5 ],
                                                                      &sPayload );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1841,6 +1920,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                          &sAddress,
                                                                          &u8SeqNum,
                                                                          &sCommand );
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -1851,6 +1932,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                               au8LinkRxBuffer [ 4 ],
                                                                               &sAddress,
                                                                               &u8SeqNum );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1863,6 +1945,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                    &u8SeqNum,
                                                                    au8LinkRxBuffer [ 5 ],
                                                                    au8LinkRxBuffer [ 6 ]);
+                u8RequestSent = 1;
             }
             break;
 #endif
@@ -1896,6 +1979,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                 au8LinkRxBuffer [ 8 ],
                                                                 u16ManId,
                                                                 au16AttributeList );
+                u8RequestSent = 1;
             }
             break;
 
@@ -1926,10 +2010,47 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                        u16ManId,
                                                                        &au8LinkRxBuffer [ 12 ],
                                                                        au8LinkRxBuffer [ 11 ],
-                                                                       u16SizePayload );
+                                                                       u16SizePayload,
+                                                                       0x02,
+                                                                       &u8SeqApsNum);
                 vLog_Printf(1,1,"DEBUG : Status : %d", u8Status);
+                u8RequestSent = 1;
             }
             break;
+            case (E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_NO_RESPONSE):
+			{
+				uint16    u16ClusterId;
+				uint16    u16ManId;
+				uint16    u16SizePayload;
+
+
+
+
+				u16ClusterId      =  ZNC_RTN_U16 ( au8LinkRxBuffer, 5 );
+				u16ManId          =  ZNC_RTN_U16 ( au8LinkRxBuffer, 9 );
+
+
+				/* payload - sum of add mode , short addr, cluster id, manf id, manf specific flag */
+				/* src ep,  dest ep, num attrib , direction*/
+				u16SizePayload    =  u16PacketLength - ( 12 ) ;
+				vLog_Printf(1,1,"DEBUG : SizePyaload : %d\n", u16SizePayload);
+				u8Status          =  APP_eSendWriteAttributesRequest ( au8LinkRxBuffer [ 3 ],
+																	   au8LinkRxBuffer [ 4 ],
+																	   u16ClusterId,
+																	   au8LinkRxBuffer [ 7 ],
+																	   &sAddress,
+																	   &u8SeqNum,
+																	   au8LinkRxBuffer [ 8 ],
+																	   u16ManId,
+																	   &au8LinkRxBuffer [ 12 ],
+																	   au8LinkRxBuffer [ 11 ],
+																	   u16SizePayload,
+																	   0x05,
+																	   &u8SeqApsNum);
+				vLog_Printf(1,1,"DEBUG : Status : %d", u8Status);
+				u8RequestSent = 1;
+			}
+			break;
             case (E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_IAS_WD):
 			{
 
@@ -1953,6 +2074,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
 				                                  FALSE,
 				                                  0,
 				                                  sizeof(asPayloadDefinition) / sizeof(tsZCL_TxPayloadItem));
+				u8RequestSent = 1;
 			}
 			break;
             case (E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_IAS_WD_SQUAWK):
@@ -1973,6 +2095,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                   FALSE,
                                                   0,
                                                   sizeof(asPayloadDefinition) / sizeof(tsZCL_TxPayloadItem));
+                u8RequestSent = 1;
+
             }
             break;
             case E_SL_MSG_CONFIG_REPORTING_REQUEST:
@@ -2025,6 +2149,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                au8LinkRxBuffer [ 8 ],           // bIsManufacturerSpecific
                                                                u16ManId,                        // u16ManufacturerCode
                                                                asAttribReportConfigRecord );    // *psAttributeReportingConfigurationRecord
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -2056,6 +2182,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                       au8LinkRxBuffer[10],     // bIsManufacturerSpecific
                                                       u16ManufacturerCode,     // u16ManufacturerCode
                                                       au8LinkRxBuffer[13]);    // u8MaximumNumberOfIdentifiers
+                u8RequestSent = 1;
             }
             break;
 
@@ -2077,6 +2204,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                               au8LinkRxBuffer [ 9 ],      // bIsManufacturerSpecific
                                                               u16ManufacturerCode,        // u16ManufacturerCode
                                                               au8LinkRxBuffer [ 12 ] );   // u8MaximumNumberOfCommands
+                u8RequestSent = 1;
             }
             break;
 
@@ -2098,6 +2226,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                              au8LinkRxBuffer [ 9 ],     // bIsManufacturerSpecific
                                                              u16ManufacturerCode,       // u16ManufacturerCode
                                                              au8LinkRxBuffer [ 12 ] );  // u8MaximumNumberOfCommands
+                u8RequestSent = 1;
             }
             break;
             case E_SL_MSG_READ_REPORT_CONFIG_REQUEST:
@@ -2132,6 +2261,8 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                             au8LinkRxBuffer [ 9 ],                                //  bIsManufacturerSpecific,
                                                                             u16ManufacturerCode,                                  //  u16ManufacturerCode,
                                                                             &asAttributeReadReportingConfigurationRecord[0] );    //  *psAttributeReadReportingConfigurationRecord);
+                u8RequestSent = 1;
+
             }
             break;
 
@@ -2147,6 +2278,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                            &sAddress,                     // *psDestinationAddress,
                                                            &u8SeqNum,                     // *pu8TransactionSequenceNumber,
                                                            &sEnrollResponsePayload );     // *psPayload);
+                u8RequestSent = 1;
             }
             break;
 
@@ -2158,6 +2290,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                             &sAddress,
                                                                             &u8SeqNum,
                                                                             au8LinkRxBuffer [ 5 ] );
+                u8RequestSent = 1;
             }
             break;
 #endif
@@ -2175,6 +2308,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                            &sAddress,                   // *psDestinationAddress,
                                                                                            &u8SeqNum,                   // *pu8TransactionSequenceNumber,
                                                                                            au8LinkRxBuffer [ 5 ] );     // u8CommandId);
+                        u8RequestSent = 1;
                     }
                     break;
 
@@ -2189,6 +2323,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                        &u8SeqNum,                   // *pu8TransactionSequenceNumber,
                                                                                        au8LinkRxBuffer [ 5 ],       // u8CommandId
                                                                                        &sGoToValueRequestPayload ); // *psGoToValueRequestPayload);
+                        u8RequestSent = 1;
                     }
                     break;
 
@@ -2203,6 +2338,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                                             &u8SeqNum,                        // *pu8TransactionSequenceNumber,
                                                                                             au8LinkRxBuffer [ 5 ],            // u8CommandId
                                                                                             &sGoToPercentageRequestPayload ); // *sGoToPercentageRequestPayload);
+                        u8RequestSent = 1;
                     }
                     break;
                 }
@@ -2225,6 +2361,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                           &sAddress,                 // *psDestinationAddress,
                                                           &u8SeqNum,                 // *pu8TransactionSequenceNumber,
                                                           &sNotificationPayload);    // *psPayload);)
+                u8RequestSent = 1;
             }
             break;
 #endif
@@ -2258,6 +2395,7 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                                     au8LinkRxBuffer[4],      //  u8DestinationEndPointId
                                                                     &sAddress,               // *psDestinationAddress,
                                                                     &u8SeqNum );             // *pu8TransactionSequenceNumber
+                u8RequestSent = 1;
             }
             break;
 
@@ -2442,14 +2580,27 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 break;
             }
         }
-        u8Length    =  0;
-        ZNC_BUF_U8_UPD  ( &au8values [ 0 ], u8Status,      u8Length );
-        ZNC_BUF_U8_UPD  ( &au8values [ 1 ], u8SeqNum,      u8Length );
-        ZNC_BUF_U16_UPD ( &au8values[ 2 ], u16PacketType, u8Length );
-        vSL_WriteMessage ( E_SL_MSG_STATUS,
-                           u8Length,
-                           au8values,
-                           0 );
+        //PDM Messages
+        if (u16PacketType < 0x8200 || u16PacketType > 0x8300)
+        {
+            vLog_Printf(TRACE_APP,LOG_DEBUG, "\nPacket Type %x \n",u16PacketType );
+
+			u8Length    =  0;
+			if (u8RequestSent == 1){
+//				u8SeqApsNum = u8ZCL_GetApsSequenceNumberOfLastTransmit ();
+				zps_tsApl *  s_sApl = ( zps_tsApl * ) ZPS_pvAplZdoGetAplHandle ();
+				u8SeqApsNum = s_sApl->sApsContext.u8SeqNum - 1 ;
+			}
+			ZNC_BUF_U8_UPD  ( &au8values [ u8Length ], u8Status,      u8Length );
+			ZNC_BUF_U8_UPD  ( &au8values [ u8Length ], u8SeqNum,      u8Length );
+			ZNC_BUF_U16_UPD ( &au8values [ u8Length ], u16PacketType, u8Length );
+            ZNC_BUF_U8_UPD  ( &au8values [ u8Length ], u8RequestSent, u8Length );
+            ZNC_BUF_U8_UPD  ( &au8values [ u8Length ], u8SeqApsNum,   u8Length );
+			vSL_WriteMessage ( E_SL_MSG_STATUS,
+							   u8Length,
+							   au8values,
+							   0 );
+        }
 
     }
 
@@ -2830,7 +2981,7 @@ PRIVATE ZPS_teStatus APP_eZdpPowerDescReq ( uint16    u16Addr,
  ****************************************************************************/
 PRIVATE ZPS_teStatus APP_eZdpSimpleDescReq ( uint16    u16Addr,
                                              uint8     u8Endpoint,
-                                             uint8*    pu8Seq )
+                                             uint8*    pu8Seq)
 {
     PDUM_thAPduInstance    hAPduInst;
 
@@ -2866,7 +3017,7 @@ PRIVATE ZPS_teStatus APP_eZdpSimpleDescReq ( uint16    u16Addr,
  *
  ****************************************************************************/
 PRIVATE ZPS_teStatus APP_eZdpActiveEndpointReq ( uint16    u16Addr,
-                                                 uint8*    pu8SeqNum )
+                                                 uint8*    pu8SeqNum)
 {
     PDUM_thAPduInstance    hAPduInst;
 
@@ -2907,7 +3058,7 @@ PRIVATE ZPS_teStatus APP_eZdpMatchDescReq ( uint16    u16Addr,
                                             uint16*   pu16InputList,
                                             uint8     u8OutputCount,
                                             uint16*   pu16OutputList,
-                                            uint8*    pu8SeqNum )
+                                            uint8*    pu8SeqNum)
 {
     PDUM_thAPduInstance    hAPduInst;
 
@@ -3030,7 +3181,8 @@ PRIVATE ZPS_teStatus APP_eZdpNwkAddrReq ( uint16    u16Dst,
 PRIVATE ZPS_teStatus APP_eZdpPermitJoiningReq ( uint16    u16DstAddr,
                                                 uint8     u8PermitDuration,
                                                 bool      bTcSignificance,
-                                                uint8*    pu8Seq )
+                                                uint8*    pu8Seq,
+                                                uint8*    pu8RequestSent)
 {
 
 
@@ -3050,7 +3202,7 @@ PRIVATE ZPS_teStatus APP_eZdpPermitJoiningReq ( uint16    u16DstAddr,
             uDstAddr.u16Addr                             =  u16DstAddr;
             sAplZdpMgmtPermitJoiningReq.u8PermitDuration =  u8PermitDuration;
             sAplZdpMgmtPermitJoiningReq.bTcSignificance  =  1; /* We should always set this to 1 as per spec*/
-
+            *pu8RequestSent = 1;
             return ZPS_eAplZdpMgmtPermitJoiningRequest ( hAPduInst,
                                                          uDstAddr,
                                                          FALSE,
@@ -3081,7 +3233,8 @@ PRIVATE ZPS_teStatus APP_eBindUnbindEntry ( bool_t           bBind,
                                             ZPS_tuAddress    *puDstAddress,
                                             uint8            u8DstEndpoint,
                                             uint8            u8DstAddrMode,
-                                            uint8*           pu8Seq )
+                                            uint8*           pu8Seq,
+                                            uint8*           pu8RequestSent)
 {
     ZPS_teStatus                 eReturnCode =  ZPS_APL_APS_E_INVALID_PARAMETER;
     ZPS_tuAddress                uAddr;
@@ -3151,6 +3304,7 @@ PRIVATE ZPS_teStatus APP_eBindUnbindEntry ( bool_t           bBind,
 
         if (PDUM_INVALID_HANDLE != hAPduInst)
         {
+        	*pu8RequestSent = 1;
             ZPS_tuAddress uDstAddr;
             /* always send to node of interest rather than a cache */
             uDstAddr.u64Addr             =  u64SrcAddr;
@@ -3675,7 +3829,9 @@ PUBLIC  teZCL_Status  APP_eSendWriteAttributesRequest ( uint8               u8So
                                                         uint16              u16ManufacturerCode,
                                                         uint8               *pu8AttributeRequestList,
                                                         uint8               u8NumberOfAttrib,
-                                                        uint16              u16SizePayload )
+                                                        uint16              u16SizePayload,
+                                                        uint8				u8CommandId,
+                                                        uint8               *pu8SeqApsNum)
 {
 
     uint32                 i;
@@ -3684,7 +3840,7 @@ PUBLIC  teZCL_Status  APP_eSendWriteAttributesRequest ( uint8               u8So
     uint16                 u16AttribId;
     PDUM_thAPduInstance    myPDUM_thAPduInstance;
     uint8                  u8FramControl =  0;
-    uint8                  u8CommandId   =  0x02;
+    //uint8                  u8CommandId   =  0x02;
     uint8                  *pu8Data      =  NULL ;
     uint16                 u16Size;
     ZPS_teStatus           eReturnCode;
@@ -3803,14 +3959,26 @@ PUBLIC  teZCL_Status  APP_eSendWriteAttributesRequest ( uint8               u8So
     }
 
     // transmit the request
-    eReturnCode = ZPS_eAplAfUnicastAckDataReq  ( myPDUM_thAPduInstance,
-                                   u16ClusterId,
-                                   u8SourceEndPointId,
-                                   u8DestinationEndPointId,
-                                   psDestinationAddress->uAddress.u16DestinationAddress,
-                                   ZPS_E_APL_AF_SECURE_NWK,
-                                   0,
-                                   NULL );
+     if (u8CommandId==0x05)
+     {
+    	 eReturnCode = ZPS_eAplAfBroadcastDataReq(myPDUM_thAPduInstance,
+                                       u16ClusterId,
+                                       u8SourceEndPointId,
+                                       u8DestinationEndPointId,
+                                       ZPS_E_APL_AF_BROADCAST_ALL,
+                                       ZPS_E_APL_AF_SECURE_NWK,
+                                       0,
+                                       pu8SeqApsNum );
+     }else{
+    	 eReturnCode = ZPS_eAplAfUnicastAckDataReq  ( myPDUM_thAPduInstance,
+    	                                    u16ClusterId,
+    	                                    u8SourceEndPointId,
+    	                                    u8DestinationEndPointId,
+    	                                    psDestinationAddress->uAddress.u16DestinationAddress,
+    	                                    ZPS_E_APL_AF_SECURE_NWK,
+    	                                    0,
+    	                                    pu8SeqApsNum );
+     }
     return(eReturnCode);
 }
 
@@ -3826,9 +3994,8 @@ PRIVATE ZPS_teStatus APP_eZdpMgmtLqiRequest( uint16    u16Addr,
                                              uint8*    pu8Seq )
 {
     PDUM_thAPduInstance    hAPduInst;
-    ZPS_teStatus result;
+
     hAPduInst =  PDUM_hAPduAllocateAPduInstance ( apduZDP );
-    DBG_vPrintf(TRACE_APP, "\n u8GetApduUse() : %d", u8GetApduUse());
 
     if ( PDUM_INVALID_HANDLE != hAPduInst )
     {
