@@ -1119,6 +1119,8 @@ bool_t APP_vProfileWideCommandSupportedForCluster ( uint16 u16Clusterid )
 
 bool_t APP_bZCL_IsManufacturerCodeSupported(uint16 u16ManufacturerCode)
 {
+	return TRUE;
+	/*
 	switch(u16ManufacturerCode)
 	{
 		// Ikea
@@ -1133,7 +1135,7 @@ bool_t APP_bZCL_IsManufacturerCodeSupported(uint16 u16ManufacturerCode)
 			return FALSE;
 		}
 	}
-	return FALSE;
+	return FALSE;*/
 }
 
 /****************************************************************************
