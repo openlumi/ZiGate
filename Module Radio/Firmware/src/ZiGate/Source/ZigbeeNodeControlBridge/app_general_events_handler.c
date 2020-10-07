@@ -499,6 +499,7 @@ PUBLIC void APP_vHandleStackEvents ( ZPS_tsAfEvent*    psStackEvent )
         {
         	if (sZllState.bRawMode){
 				Znc_vSendDataIndicationToHost(psStackEvent, au8LinkTxBuffer);
+                PDUM_eAPduFreeAPduInstance( psStackEvent->uEvent.sApsDataIndEvent.hAPduInst );
 				return;
 			}
             uint8*    dataPtr =  ( uint8* ) PDUM_pvAPduInstanceGetPayload ( psStackEvent->uEvent.sApsDataIndEvent.hAPduInst );
