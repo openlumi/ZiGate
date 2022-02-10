@@ -84,15 +84,12 @@ extern "C" {
 typedef enum
 {
 /* Common Commands */
-	E_SL_MSG_HEADERPARAMS                                      =   0x7000,
     E_SL_MSG_STATUS                                            =   0x8000,
     E_SL_MSG_LOG                                               =   0x8001,
 
-
     E_SL_MSG_SET_RAWMODE                                       =   0x0002,
-    E_SL_MSG_SET_DISABLEDEFAULTRESPONSEMODE					   =   0x0003,
-
     E_SL_MSG_DATA_INDICATION                                   =   0x8002,
+
     E_SL_MSG_NODE_CLUSTER_LIST                                 =   0x8003,
     E_SL_MSG_NODE_ATTRIBUTE_LIST                               =   0x8004,
     E_SL_MSG_NODE_COMMAND_ID_LIST                              =   0x8005,
@@ -126,17 +123,6 @@ typedef enum
     E_SL_MSG_ZLL_FACTORY_NEW                                   =   0x0013,
     E_SL_MSG_GET_PERMIT_JOIN                                   =   0x0014,
     E_SL_MSG_GET_PERMIT_JOIN_RESPONSE                          =   0x8014,
-    E_SL_MSG_GET_DISPLAY_ADDRESS_MAP_TABLE                       =   0x0015,
-    E_SL_MSG_GET_DISPLAY_ADDRESS_MAP_TABLE_LIST                =   0x8015,
-    E_SL_MSG_SET_TIMESERVER                                       =   0x0016,
-
-    E_SL_MSG_GET_TIMESERVER                                       =   0x0017,
-    E_SL_MSG_GET_TIMESERVER_LIST                               =   0x8017,
-
-    E_SL_MSG_SET_LED                                           =   0x0018,
-    E_SL_MSG_SET_CE_FCC                                           =   0x0019,
-
-    E_SL_MSG_SET_FLOW_CONTROL								   =   0x002F,
     E_SL_MSG_BIND                                              =   0x0030,
     E_SL_MSG_BIND_RESPONSE                                     =   0x8030,
     E_SL_MSG_UNBIND                                            =   0x0031,
@@ -145,11 +131,6 @@ typedef enum
     E_SL_MSG_BIND_GROUP_RESPONSE                               =   0x8032,
     E_SL_MSG_UNBIND_GROUP                                      =   0x0033,
     E_SL_MSG_UNBIND_GROUP_RESPONSE                             =   0x8033,
-
-#ifdef PDM_DEBUG
-    E_SL_MSG_DEBUG_PDM                                         =   0x0034,
-#endif
-    E_SL_MSG_EVENT_PDM                                         =   0x8035,
 
     E_SL_MSG_MANY_TO_ONE_ROUTE_REQUEST                         =   0x004F,
     E_SL_MSG_COMPLEX_DESCRIPTOR_REQUEST                        =   0x0531,
@@ -214,7 +195,6 @@ typedef enum
     E_SL_MSG_MOVE_STEP                                         =   0x0082,
     E_SL_MSG_MOVE_STOP_MOVE                                    =   0x0083,
     E_SL_MSG_MOVE_STOP_ONOFF                                   =   0x0084,
-    E_SL_MSG_MOVE_TO_LEVEL_UPDATE                              =   0x8085,
 
     /* Scenes Cluster */
     E_SL_MSG_VIEW_SCENE                                        =   0x00A0,
@@ -230,7 +210,6 @@ typedef enum
     E_SL_MSG_RECALL_SCENE                                      =   0x00A5,
     E_SL_MSG_SCENE_MEMBERSHIP_REQUEST                          =   0x00A6,
     E_SL_MSG_SCENE_MEMBERSHIP_RESPONSE                         =   0x80A6,
-    E_SL_MSG_SCENE_IKEA_REMOTE_BUTTON_PRESS                    =   0x80A7,
 
     /* Colour Cluster */
     E_SL_MSG_MOVE_TO_HUE                                       =   0x00B0,
@@ -277,9 +256,6 @@ typedef enum
     /* Door Lock Cluster */
     E_SL_MSG_LOCK_UNLOCK_DOOR                                   =  0x00F0,
 
-    /* Window Covering Cluster */
-    E_SL_MSG_WINDOW_COVERING_CMD                                =  0x00FA,
-
     /* ZHA Commands */
     E_SL_MSG_READ_ATTRIBUTE_REQUEST                             =  0x0100,
     E_SL_MSG_READ_ATTRIBUTE_RESPONSE                            =  0x8100,
@@ -287,9 +263,6 @@ typedef enum
     E_SL_MSG_REPORT_IND_ATTR_RESPONSE                           =  0x8102,
     E_SL_MSG_WRITE_ATTRIBUTE_REQUEST                            =  0x0110,
     E_SL_MSG_WRITE_ATTRIBUTE_RESPONSE                           =  0x8110,
-    E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_IAS_WD                     =  0x0111,
-    E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_IAS_WD_SQUAWK              =  0x0112,
-    E_SL_MSG_WRITE_ATTRIBUTE_REQUEST_NO_RESPONSE                =  0x0113,
     E_SL_MSG_CONFIG_REPORTING_REQUEST                           =  0x0120,
     E_SL_MSG_CONFIG_REPORTING_RESPONSE                          =  0x8120,
     E_SL_MSG_REPORT_ATTRIBUTES                                  =  0x8121,
@@ -306,27 +279,16 @@ typedef enum
     E_SL_MSG_COMMAND_GENERATED_DISCOVERY_INDIVIDUAL_RESPONSE    =  0x8160,
     E_SL_MSG_COMMAND_GENERATED_DISCOVERY_RESPONSE               =  0x8161,
 
-    E_SL_MSG_SAVE_PDM_RECORD_REQUEST                            =  0x0200,
+    E_SL_MSG_SAVE_PDM_RECORD                                    =  0x0200,
     E_SL_MSG_SAVE_PDM_RECORD_RESPONSE                           =  0x8200,
     E_SL_MSG_LOAD_PDM_RECORD_REQUEST                            =  0x0201,
     E_SL_MSG_LOAD_PDM_RECORD_RESPONSE                           =  0x8201,
-    E_SL_MSG_DELETE_ALL_PDM_RECORDS_REQUEST                     =  0x0202,
-    E_SL_MSG_DELETE_PDM_RECORD_REQUEST                          =  0x0203,
-    E_SL_MSG_CREATE_BITMAP_RECORD_REQUEST                       =  0x0204,
-    E_SL_MSG_CREATE_BITMAP_RECORD_RESPONSE                      =  0x8204,
-    E_SL_MSG_DELETE_BITMAP_RECORD_REQUEST                       =  0x0205,
-    E_SL_MSG_GET_BITMAP_RECORD_REQUEST                          =  0x0206,
-    E_SL_MSG_GET_BITMAP_RECORD_RESPONSE                         =  0x8206,
-    E_SL_MSG_INCREMENT_BITMAP_RECORD_REQUEST                    =  0x0207,
-    E_SL_MSG_INCREMENT_BITMAP_RECORD_RESPONSE                   =  0x8207,
-    E_SL_MSG_PDM_EXISTENCE_REQUEST                              =  0x0208,
-    E_SL_MSG_PDM_EXISTENCE_RESPONSE                             =  0x8208,
-	
+    E_SL_MSG_DELETE_PDM_RECORD                                  =  0x0202,
+
     E_SL_MSG_PDM_HOST_AVAILABLE                                 =  0x0300,
     E_SL_MSG_ASC_LOG_MSG                                        =  0x0301,
     E_SL_MSG_ASC_LOG_MSG_RESPONSE                               =  0x8301,
     E_SL_MSG_PDM_HOST_AVAILABLE_RESPONSE                        =  0x8300,
-    E_SL_MSG_PDM_LOADED                                         =  0x0302,
     /* IAS Cluster */
     E_SL_MSG_SEND_IAS_ZONE_ENROLL_RSP                           =  0x0400,
     E_SL_MSG_IAS_ZONE_STATUS_CHANGE_NOTIFY                      =  0x8401,
@@ -347,8 +309,6 @@ typedef enum
     E_SL_MSG_NWK_RECOVERY_RESTORE_RSP                           =  0x8601,
 
     E_SL_MSG_ROUTE_DISCOVERY_CONFIRM                            =  0x8701,
-    E_SL_MSG_APS_DATA_ACK										=  0x8011,
-    E_SL_MSG_APS_DATA_CONFIRM                                   =  0x8012,
     E_SL_MSG_APS_DATA_CONFIRM_FAILED                            =  0x8702,
 
     E_SL_MSG_AHI_DIO_SET_DIRECTION                              =  0x0801,
@@ -356,9 +316,13 @@ typedef enum
     E_SL_MSG_AHI_DIO_READ_INPUT                                 =  0x0803,
     E_SL_MSG_AHI_DIO_READ_INPUT_RSP                             =  0x8803,
     E_SL_MSG_AHI_SET_TX_POWER                                   =  0x0806,
-    E_SL_MSG_AHI_SET_TX_POWER_RSP                               =  0x8806,
-    E_SL_MSG_AHI_GET_TX_POWER                                   =  0x0807,
-    E_SL_MSG_AHI_GET_TX_POWER_RSP                               =  0x8807,
+
+    E_SL_MSG_DUMP_PDM_RECORD                                    =  0x0B00,
+    E_SL_MSG_DUMP_PDM_RECORD_RESPONSE                           =  0x8B00,
+    E_SL_MSG_RESTORE_PDM_RECORD_REQUEST                         =  0x0B01,
+    E_SL_MSG_RESTORE_PDM_RECORD_RESPONSE                        =  0x8B01,
+    E_SL_MSG_RESTORE_PDM_MODE                                   =  0x0B02,
+
 } teSL_MsgType;
 typedef enum
 {
@@ -431,4 +395,3 @@ PUBLIC uint8 u8SL_CalculateCRC(uint16 u16Type, uint16 u16Length, uint8 *pu8Data)
 /****************************************************************************/
 /***        END OF FILE                                                   ***/
 /****************************************************************************/
-
