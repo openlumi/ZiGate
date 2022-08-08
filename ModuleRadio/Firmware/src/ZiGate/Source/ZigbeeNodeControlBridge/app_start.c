@@ -376,9 +376,9 @@ PUBLIC void vAppMain(void)
     }
     //bAHI_FlashInit(141, NULL);
     vInitialiseApp ();
-    //app_vFormatAndSendUpdateLists ( );
+    if(sZllState.eState != PDM_UPDATE) {
+    app_vFormatAndSendUpdateLists ( );
 
-    
     if (sZllState.eNodeState == E_RUNNING)
     {
         /* Declared within if statement. If it is declared at the top
@@ -408,9 +408,17 @@ PUBLIC void vAppMain(void)
                           ( uint8* ) &sZllState.eNodeState,
                           0);
     }
+
     ZTIMER_eStart ( u8TickTimer, ZCL_TICK_TIME );
 
+
     DBG_vPrintf( TRACE_APPSTART, "APP: Entering APP_vMainLoop()\n");
+    }else{
+        vSL_WriteMessage( E_SL_MSG_NODE_FACTORY_NEW_RESTART,
+                          1,
+                          ( uint8* ) &sZllState.eNodeState,
+                          0 );
+    }
     APP_vMainLoop();
 
 }
@@ -558,6 +566,9 @@ PRIVATE void vInitialiseApp ( void )
     vLog_Printf ( TRACE_EXC,LOG_DEBUG,  "PDM: test %d\n", sEndpointTable.u8NumRecords );
 #endif
 
+    if(sZllState.eState != PDM_UPDATE) {
+    ZPS_u32MacSetTxBuffers  ( 5 );
+
     if ( sZllState.eNodeState == E_RUNNING )
     {
         u8DeviceType = ( sZllState.u8DeviceType >=  2 ) ? 1 : sZllState.u8DeviceType;
@@ -603,6 +614,7 @@ PRIVATE void vInitialiseApp ( void )
         vAppInitOTA();
 #endif
     }
+    }
 }
 
 
@@ -623,9 +635,12 @@ PUBLIC void APP_vMainLoop(void)
     while (TRUE)
     {
         
+    	if(sZllState.eState != PDM_UPDATE) {
         zps_taskZPS ( );
         bdb_taskBDB ( );
+
         APP_vHandleAppEvents ( );
+    	}
         APP_vProcessRxData ( );
         ZTIMER_vTask ( );
 

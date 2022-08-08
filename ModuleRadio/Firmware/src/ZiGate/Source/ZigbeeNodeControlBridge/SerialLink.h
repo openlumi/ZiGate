@@ -359,6 +359,12 @@ typedef enum
     E_SL_MSG_AHI_SET_TX_POWER_RSP                               =  0x8806,
     E_SL_MSG_AHI_GET_TX_POWER                                   =  0x0807,
     E_SL_MSG_AHI_GET_TX_POWER_RSP                               =  0x8807,
+
+    E_SL_MSG_DUMP_PDM_RECORD                                    =  0x0B00,
+    E_SL_MSG_DUMP_PDM_RECORD_RESPONSE                           =  0x8B00,
+    E_SL_MSG_RESTORE_PDM_RECORD_REQUEST                         =  0x0B01,
+    E_SL_MSG_RESTORE_PDM_RECORD_RESPONSE                        =  0x8B01,
+    E_SL_MSG_RESTORE_PDM_MODE                                   =  0x0B02,
 } teSL_MsgType;
 typedef enum
 {
