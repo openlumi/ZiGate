@@ -131,6 +131,7 @@ CFLAGS  += -DTRACE_APP
 
 CFLAGS += -DDEBUG_APP_GP
 CFLAGS += -DTRACE_GP_DEBUG
+CFLAGS += -D__ba__
 
 endif
 
@@ -215,6 +216,7 @@ APPSRC += SerialLink.c
 APPSRC += uart.c
 APPSRC += pdum_apdu.S
 APPSRC += app_ota_server.c
+APPSRC += umsgpack.c
 ifeq ($(JENNIC_CHIP_FAMILY),JN517x)
 APPSRC += AHI_ModuleConfiguration.c
 endif

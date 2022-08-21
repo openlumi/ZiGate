@@ -78,6 +78,7 @@
 #include "PDM_IDs.h"
 #include "ApplianceStatistics.h"
 #include "bdb_DeviceCommissioning.h"
+#include "umsgpack.h"
 
 //FRED IASWD
 #include "IASWD.h"
@@ -102,6 +103,8 @@
 #ifndef VERSION
 #define VERSION    0x00030321
 #endif
+
+#define MSGPACK_NAME(x) (char *) (x),(sizeof(x)-1)
 /****************************************************************************/
 /***    Type Definitions                          ***/
 /****************************************************************************/
@@ -2678,65 +2681,155 @@ PRIVATE void dump_PDM( uint8 *pu8LinkRxBuffer,
                        uint16 u16PacketLength )
 {
     uint16    i;
-    uint16    offset=0;
+    uint16    offset = 0;
     uint16    found;
     uint16    dataLength;
+    uint16    checkResult;
+    uint16    devicesNum = 0;
     uint16    u16DataBytesRead;
-    uint16    hits=0;
-    uint16    fullsize=2;
-    uint16    pdm_addresses[17] = { 0x0010, 0xf000, 0xf001, 0xf002, 0xf003, 0xf004, 0xf005, 0xf006, 0xf100, 0xf101, 0xf102, 0xf103, 0xf104, 0xf105, 0xf106, 0x0001, 0x0002, 0x0003 };
-    uint8     tmp[0x800];
+    uint16    hits = 0;
+    uint16    fullsize = 2;
+//    uint16    pdm_addresses[17] = { 0x0010, 0xf000, 0xf001, 0xf002, 0xf003, 0xf004, 0xf005, 0xf006, 0xf100, 0xf101, 0xf102, 0xf103, 0xf104, 0xf105, 0xf106, 0x0001, 0x0002, 0x0003 };
+    uint8     mp_buf[0x700];
     uint16    addr = ZNC_RTN_U16(pu8LinkRxBuffer, 0);
 
-    if(u16PacketLength>0 || addr == 0xffff) 
-    {
-    	if( PDM_bDoesDataExist(addr, &dataLength)!=0) {
-			PDM_eReadDataFromRecord ( addr, &tmp[8], dataLength, &u16DataBytesRead );
-			//PDM address
-			tmp[0] = addr >> 8;
-			tmp[1] = addr & 0xff;
-			//Data size
-			tmp[2] = dataLength >> 8;
-			tmp[3] = dataLength & 0xff;
-			//PDM data size
-			tmp[4] = dataLength >> 8;
-			tmp[5] = dataLength & 0xff;
-			//PDM data offset
-			tmp[6]=0;
-			tmp[7]=0;
-			vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Dump %04x [%04x] %04x** ", addr, dataLength, u16DataBytesRead );
-			vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, dataLength+8, tmp, 0 );
-    	}
-        else
-        {
-    		vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Not found %04x [%04x]** ", addr, dataLength );
-			vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, 0, pu8LinkRxBuffer, 0 );
-    	}
+    struct umsgpack_packer_buf *buf = (struct umsgpack_packer_buf*)&mp_buf;
+
+    ZPS_tsAplAib tmpZPS_tsAplAib;
+    PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_AIB, &tmpZPS_tsAplAib,
+                              20, &u16DataBytesRead );
+
+    ZPS_tsNWkNibPersist tmpZPS_tsNWkNibPersist;
+    PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_NIB_PERSIST, &tmpZPS_tsNWkNibPersist,
+                              sizeof(tmpZPS_tsNWkNibPersist), &u16DataBytesRead );
+
+    ZPS_tsNwkSecMaterialSet tmpZPS_tsNwkSecMaterialSet[1];
+    PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_SEC_MATERIAL_KEY, &tmpZPS_tsNwkSecMaterialSet,
+                              sizeof(tmpZPS_tsNwkSecMaterialSet), &u16DataBytesRead );
+
+    ZPS_tsNwkActvNtEntry tmpZPS_tsNwkActvNtEntry[40];
+    checkResult = PDM_bDoesDataExist(PDM_ID_INTERNAL_CHILD_TABLE, &dataLength);
+    devicesNum = checkResult ? dataLength/sizeof(ZPS_tsNwkActvNtEntry) : 0;
+    if (checkResult){
+        PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_CHILD_TABLE, &tmpZPS_tsNwkActvNtEntry,
+                                  sizeof(tmpZPS_tsNwkActvNtEntry), &u16DataBytesRead );
     }
-    else
-    {
-    	for (i=0; i<17; i++) 
-        {
-			if( PDM_bDoesDataExist( pdm_addresses[i], &dataLength ) != 0 ) 
-            {
-				PDM_eReadDataFromRecord ( pdm_addresses[i], &tmp[8], dataLength, &u16DataBytesRead );
-				//PDM address
-				tmp[0] = pdm_addresses[i] >> 8;
-				tmp[1] = pdm_addresses[i] & 0xff;
-				//Data size
-				tmp[2] = dataLength >> 8;
-				tmp[3] = dataLength & 0xff;
-				//PDM data size
-				tmp[4] = dataLength >> 8;
-				tmp[5] = dataLength & 0xff;
-				//PDM data offset
-				tmp[6]=0;
-				tmp[7]=0;
-				vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Dump %04x [%04x] %04x** ", pdm_addresses[i], dataLength, u16DataBytesRead );
-				vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, dataLength+8, tmp, 0 );
-			}
-    	}
+
+    uint16 tmppu16AddrMapNwk[70];
+    checkResult = PDM_bDoesDataExist(PDM_ID_INTERNAL_SHORT_ADDRESS_MAP, &dataLength);
+    if (checkResult){
+        PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_SHORT_ADDRESS_MAP, &tmppu16AddrMapNwk,
+                                  sizeof(tmppu16AddrMapNwk), &u16DataBytesRead );
     }
+    uint64 tmps_au64NwkAddrMapExt[70];
+    checkResult = PDM_bDoesDataExist(PDM_ID_INTERNAL_NWK_ADDRESS_MAP, &dataLength);
+    if (checkResult){
+        PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_NWK_ADDRESS_MAP, &tmps_au64NwkAddrMapExt,
+                                  sizeof(tmps_au64NwkAddrMapExt), &u16DataBytesRead );
+    }
+
+    umsgpack_packer_init(buf, sizeof(mp_buf));
+    umsgpack_pack_map(buf, 8);
+    umsgpack_pack_str(buf, MSGPACK_NAME("coordinator_ieee"));
+    umsgpack_pack_bin(buf, (char *) &tmpZPS_tsAplAib.u64ApsTrustCenterAddress, 8);
+    umsgpack_pack_str(buf, MSGPACK_NAME("pan_id"));
+    umsgpack_pack_bin(buf, (char *) &tmpZPS_tsNWkNibPersist.u16VsPanId, 2);
+    umsgpack_pack_str(buf, MSGPACK_NAME("extended_pan_id"));
+    umsgpack_pack_bin(buf, (char *) &tmpZPS_tsAplAib.u64ApsUseExtendedPanid, 8);
+    umsgpack_pack_str(buf, MSGPACK_NAME("nwk_update_id"));
+    umsgpack_pack_uint(buf, tmpZPS_tsNWkNibPersist.u8UpdateId);
+    umsgpack_pack_str(buf, MSGPACK_NAME("channel"));
+    umsgpack_pack_uint(buf, tmpZPS_tsNWkNibPersist.u8VsChannel);
+    umsgpack_pack_str(buf, MSGPACK_NAME("security_level"));
+    umsgpack_pack_uint(buf, u32ChannelMask);
+    umsgpack_pack_str(buf, MSGPACK_NAME("network_key"));
+    umsgpack_pack_map(buf, 3);
+    umsgpack_pack_str(buf, MSGPACK_NAME("key"));
+    umsgpack_pack_bin(buf, tmpZPS_tsNwkSecMaterialSet[0].au8Key, sizeof(tmpZPS_tsNwkSecMaterialSet[0].au8Key));
+    umsgpack_pack_str(buf, MSGPACK_NAME("sequence_number"));
+    umsgpack_pack_uint(buf, tmpZPS_tsNwkSecMaterialSet[0].u8KeySeqNum);
+    umsgpack_pack_str(buf, MSGPACK_NAME("frame_counter"));
+    umsgpack_pack_uint(buf, u32OldFrameCtr);
+    umsgpack_pack_str(buf, MSGPACK_NAME("devices"));
+//    umsgpack_pack_uint(buf, devicesNum);
+    devicesNum = 3; // for smaller output. Actual size if 40 (empty) items
+    umsgpack_pack_array(buf, devicesNum);
+    for (i = 0; i < devicesNum; i ++) {
+        umsgpack_pack_array(buf, 2);
+        umsgpack_pack_bin(buf, (char *) &tmppu16AddrMapNwk[i], 2);
+        umsgpack_pack_bin(buf, (char *) &tmps_au64NwkAddrMapExt[i], 8);
+
+//        umsgpack_pack_map(buf, 2); //3
+//        umsgpack_pack_str(buf, MSGPACK_NAME("nwk_address"));
+//        umsgpack_pack_uint(buf, 0);
+////        umsgpack_pack_bin(buf, (char *) &tmppu16AddrMapNwk[i], 2);
+//        // umsgpack_pack_uint(buf, tmppu16AddrMapNwk[i]);
+//        umsgpack_pack_str(buf, MSGPACK_NAME("ieee_address"));
+//        umsgpack_pack_uint(buf, 0);
+////        umsgpack_pack_bin(buf, (char *) &tmps_au64NwkAddrMapExt[i], 8);
+
+////        umsgpack_pack_str(buf, MSGPACK_NAME("link_key"));
+////        umsgpack_pack_map(buf, 3);
+////        umsgpack_pack_str(buf, MSGPACK_NAME("key"));
+////        umsgpack_pack_uint(buf, 0);
+////        umsgpack_pack_str(buf, MSGPACK_NAME("rx_counter"));
+////        umsgpack_pack_uint(buf, 0);
+////        umsgpack_pack_str(buf, MSGPACK_NAME("tx_counter"));
+////        umsgpack_pack_uint(buf, 0);
+    }
+    vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, umsgpack_get_length(buf), buf->data, 0 );
+    return;
+
+
+//    if(u16PacketLength>0 || addr == 0xffff)
+//    {
+//    	if( PDM_bDoesDataExist(addr, &dataLength)!=0) {
+//			PDM_eReadDataFromRecord ( addr, &tmp[8], dataLength, &u16DataBytesRead );
+//			//PDM address
+//			tmp[0] = addr >> 8;
+//			tmp[1] = addr & 0xff;
+//			//Data size
+//			tmp[2] = dataLength >> 8;
+//			tmp[3] = dataLength & 0xff;
+//			//PDM data size
+//			tmp[4] = dataLength >> 8;
+//			tmp[5] = dataLength & 0xff;
+//			//PDM data offset
+//			tmp[6]=0;
+//			tmp[7]=0;
+//			vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Dump %04x [%04x] %04x** ", addr, dataLength, u16DataBytesRead );
+//			vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, dataLength+8, tmp, 0 );
+//    	}
+//        else
+//        {
+//    		vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Not found %04x [%04x]** ", addr, dataLength );
+//			vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, 0, pu8LinkRxBuffer, 0 );
+//    	}
+//    }
+//    else
+//    {
+//    	for (i=0; i<17; i++)
+//        {
+//			if( PDM_bDoesDataExist( pdm_addresses[i], &dataLength ) != 0 )
+//            {
+//				PDM_eReadDataFromRecord ( pdm_addresses[i], &tmp[8], dataLength, &u16DataBytesRead );
+//				//PDM address
+//				tmp[0] = pdm_addresses[i] >> 8;
+//				tmp[1] = pdm_addresses[i] & 0xff;
+//				//Data size
+//				tmp[2] = dataLength >> 8;
+//				tmp[3] = dataLength & 0xff;
+//				//PDM data size
+//				tmp[4] = dataLength >> 8;
+//				tmp[5] = dataLength & 0xff;
+//				//PDM data offset
+//				tmp[6]=0;
+//				tmp[7]=0;
+//				vLog_Printf ( TRACE_APP, LOG_INFO, "\n**Dump %04x [%04x] %04x** ", pdm_addresses[i], dataLength, u16DataBytesRead );
+//				vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, dataLength+8, tmp, 0 );
+//			}
+//    	}
+//    }
 }
 
 PRIVATE void restore_PDM(uint8 *pu8LinkRxBuffer, uint16 u16PacketLength)
