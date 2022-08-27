@@ -291,6 +291,78 @@ PUBLIC void vSL_WriteMessage(uint16 u16Type, uint16 u16Length, uint8 *pu8Data, u
 }
 
 
+PUBLIC uint8 u8SL_CalculateCRCChunk(uint16 u16Length, uint8 *pu8Data)
+{
+
+    int n;
+    uint8 u8CRC = 0;
+
+    for(n = 0; n < u16Length; n++)
+    {
+        u8CRC ^= pu8Data[n];
+    }
+
+    return(u8CRC);
+}
+
+
+PUBLIC uint8 vSL_WriteMessageStart(uint16 u16Type, uint16 u16Length)
+{
+    uint8 u8CRC;
+
+    /* Send start character */
+    vSL_TxByte(TRUE, SL_START_CHAR);
+
+    /* Send message type */
+    vSL_TxByte(FALSE, (u16Type >> 8) & 0xff);
+    vSL_TxByte(FALSE, (u16Type >> 0) & 0xff);
+
+    /* Send message length */
+
+    vSL_TxByte(FALSE, (u16Length >> 8) & 0xff);
+    vSL_TxByte(FALSE, (u16Length >> 0) & 0xff);
+
+    u8CRC  = (u16Type   >> 0) & 0xff;
+    u8CRC ^= (u16Type   >> 8) & 0xff;
+    u8CRC ^= (u16Length >> 0) & 0xff;
+    u8CRC ^= (u16Length >> 8) & 0xff;
+
+    /* Send message checksum */
+    vSL_TxByte(FALSE, 0); // adjust message to be equal to crc = 0
+
+    return u8CRC;
+}
+
+PUBLIC uint8 vSL_WriteMessageWriteChunk(uint16 u16Length, uint8 *pu8Data)
+{
+    int n;
+    uint8 u8CRC;
+
+    /* Send message payload */
+    for(n = 0; n < u16Length; n++)
+    {
+        vSL_TxByte(FALSE, pu8Data[n]);
+    }
+    u8CRC = u8SL_CalculateCRCChunk(u16Length, pu8Data);
+    return u8CRC;
+}
+
+PUBLIC void vSL_WriteMessageEnd(int16 u16Length, int16 fullMessageLength, uint8 u8CRC, uint8 u8LinkQuality)
+{
+    int n;
+    for(n = 0; n < u16Length - 4; n++)
+    {
+        vSL_TxByte(FALSE, 0);
+    }
+    vSL_TxByte(FALSE, (fullMessageLength >> 8) & 0xff);
+    vSL_TxByte(FALSE, (fullMessageLength >> 0) & 0xff);
+    vSL_TxByte(FALSE, u8CRC ^ u8LinkQuality ^ (fullMessageLength >> 8) & 0xff ^ (fullMessageLength) & 0xff);
+    vSL_TxByte(FALSE, u8LinkQuality);
+
+    /* Send end character */
+    vSL_TxByte(TRUE, SL_END_CHAR);
+}
+
 /****************************************************************************
  *
  * NAME: vSL_LogSend

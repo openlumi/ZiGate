@@ -2677,11 +2677,14 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
 
 }
 
+#define MAX_RESPONSE_SIZE 0x1000
+#define BUFFER_SIZE 0x500
+
 PRIVATE void dump_PDM( uint8 *pu8LinkRxBuffer, 
                        uint16 u16PacketLength )
 {
     uint16    i;
-    uint16    offset = 0;
+    uint16    offset = 0;  // full message length
     uint16    found;
     uint16    dataLength;
     uint16    checkResult;
@@ -2690,8 +2693,11 @@ PRIVATE void dump_PDM( uint8 *pu8LinkRxBuffer,
     uint16    hits = 0;
     uint16    fullsize = 2;
 //    uint16    pdm_addresses[17] = { 0x0010, 0xf000, 0xf001, 0xf002, 0xf003, 0xf004, 0xf005, 0xf006, 0xf100, 0xf101, 0xf102, 0xf103, 0xf104, 0xf105, 0xf106, 0x0001, 0x0002, 0x0003 };
-    uint8     mp_buf[0x700];
+    uint8     mp_buf[BUFFER_SIZE];
     uint16    addr = ZNC_RTN_U16(pu8LinkRxBuffer, 0);
+    uint8     u8CRC;
+    uint16    bufLength = 0;
+    uint16    fullLength = 0;
 
     struct umsgpack_packer_buf *buf = (struct umsgpack_packer_buf*)&mp_buf;
 
@@ -2715,18 +2721,20 @@ PRIVATE void dump_PDM( uint8 *pu8LinkRxBuffer,
                                   sizeof(tmpZPS_tsNwkActvNtEntry), &u16DataBytesRead );
     }
 
-    uint16 tmppu16AddrMapNwk[70];
+    uint16 tmppu16AddrMapNwk[70] = { 0 };
     checkResult = PDM_bDoesDataExist(PDM_ID_INTERNAL_SHORT_ADDRESS_MAP, &dataLength);
     if (checkResult){
         PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_SHORT_ADDRESS_MAP, &tmppu16AddrMapNwk,
                                   sizeof(tmppu16AddrMapNwk), &u16DataBytesRead );
     }
-    uint64 tmps_au64NwkAddrMapExt[70];
+    uint64 tmps_au64NwkAddrMapExt[70] = { 0 };
     checkResult = PDM_bDoesDataExist(PDM_ID_INTERNAL_NWK_ADDRESS_MAP, &dataLength);
     if (checkResult){
         PDM_eReadDataFromRecord ( PDM_ID_INTERNAL_NWK_ADDRESS_MAP, &tmps_au64NwkAddrMapExt,
                                   sizeof(tmps_au64NwkAddrMapExt), &u16DataBytesRead );
     }
+
+    u8CRC = vSL_WriteMessageStart(E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, MAX_RESPONSE_SIZE);
 
     umsgpack_packer_init(buf, sizeof(mp_buf));
     umsgpack_pack_map(buf, 8);
@@ -2750,34 +2758,47 @@ PRIVATE void dump_PDM( uint8 *pu8LinkRxBuffer,
     umsgpack_pack_uint(buf, tmpZPS_tsNwkSecMaterialSet[0].u8KeySeqNum);
     umsgpack_pack_str(buf, MSGPACK_NAME("frame_counter"));
     umsgpack_pack_uint(buf, u32OldFrameCtr);
+
+    bufLength = umsgpack_get_length(buf);
+    u8CRC = vSL_WriteMessageWriteChunk(bufLength, buf->data) ^ u8CRC;
+    buf->pos = 0;
+    offset += bufLength;
+
     umsgpack_pack_str(buf, MSGPACK_NAME("devices"));
-//    umsgpack_pack_uint(buf, devicesNum);
-    devicesNum = 3; // for smaller output. Actual size if 40 (empty) items
     umsgpack_pack_array(buf, devicesNum);
     for (i = 0; i < devicesNum; i ++) {
-        umsgpack_pack_array(buf, 2);
-        umsgpack_pack_bin(buf, (char *) &tmppu16AddrMapNwk[i], 2);
-        umsgpack_pack_bin(buf, (char *) &tmps_au64NwkAddrMapExt[i], 8);
+        bufLength = umsgpack_get_length(buf);
+        if (bufLength && ((i % 10) == 0)) {
+            u8CRC = vSL_WriteMessageWriteChunk(bufLength, buf->data) ^ u8CRC;
+            buf->pos = 0;
+            offset += bufLength;
+        }
 
-//        umsgpack_pack_map(buf, 2); //3
-//        umsgpack_pack_str(buf, MSGPACK_NAME("nwk_address"));
-//        umsgpack_pack_uint(buf, 0);
-////        umsgpack_pack_bin(buf, (char *) &tmppu16AddrMapNwk[i], 2);
-//        // umsgpack_pack_uint(buf, tmppu16AddrMapNwk[i]);
-//        umsgpack_pack_str(buf, MSGPACK_NAME("ieee_address"));
-//        umsgpack_pack_uint(buf, 0);
-////        umsgpack_pack_bin(buf, (char *) &tmps_au64NwkAddrMapExt[i], 8);
+        umsgpack_pack_map(buf, 3);
+        umsgpack_pack_str(buf, MSGPACK_NAME("nwk_address"));
+        umsgpack_pack_uint(buf, tmppu16AddrMapNwk[i]);
+//        umsgpack_pack_bin(buf, (char *) &tmppu16AddrMapNwk[i], sizeof(tmppu16AddrMapNwk));
+        umsgpack_pack_str(buf, MSGPACK_NAME("ieee_address"));
+        umsgpack_pack_bin(buf, (char *) &tmps_au64NwkAddrMapExt[i], sizeof(uint64));
 
-////        umsgpack_pack_str(buf, MSGPACK_NAME("link_key"));
-////        umsgpack_pack_map(buf, 3);
-////        umsgpack_pack_str(buf, MSGPACK_NAME("key"));
-////        umsgpack_pack_uint(buf, 0);
-////        umsgpack_pack_str(buf, MSGPACK_NAME("rx_counter"));
-////        umsgpack_pack_uint(buf, 0);
-////        umsgpack_pack_str(buf, MSGPACK_NAME("tx_counter"));
-////        umsgpack_pack_uint(buf, 0);
+        umsgpack_pack_str(buf, MSGPACK_NAME("link_key"));
+        umsgpack_pack_map(buf, 3);
+        umsgpack_pack_str(buf, MSGPACK_NAME("key"));
+        umsgpack_pack_uint(buf, 0);
+        umsgpack_pack_str(buf, MSGPACK_NAME("rx_counter"));
+        umsgpack_pack_uint(buf, 0);
+        umsgpack_pack_str(buf, MSGPACK_NAME("tx_counter"));
+        umsgpack_pack_uint(buf, 0);
     }
-    vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, umsgpack_get_length(buf), buf->data, 0 );
+    bufLength = umsgpack_get_length(buf);
+    if (bufLength) {
+        u8CRC = vSL_WriteMessageWriteChunk(bufLength, buf->data) ^ u8CRC;
+        buf->pos = 0;
+        offset += bufLength;
+    }
+
+    vSL_WriteMessageEnd(MAX_RESPONSE_SIZE-offset, offset, u8CRC, 0);
+//    vSL_WriteMessage ( E_SL_MSG_DUMP_PDM_RECORD_RESPONSE, umsgpack_get_length(buf), buf->data, 0 );
     return;
 
 
