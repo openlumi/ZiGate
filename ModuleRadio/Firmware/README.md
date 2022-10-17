@@ -1,3 +1,9 @@
+# Version 3.23
+
+* Add all mode to RAW mode command (Bound, short, IEEE, group, broadcast)
+* Fix WindowCovering to permit lift percentage
+* Fix : send defaultResponse only if ZCL
+
 # Version 3.21
 
 * Add raw message when there are errors on write attribute command
