@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Get toolchain
         run: mkdir -p ${{ env.SDK_DIR }}/Tools && wget https://github.com/openlumi/BA2-toolchain/releases/download/20201219/ba-toolchain-20201219.tar.bz2 -O - | tar -jx -C ${{ env.SDK_DIR }}/Tools && ln -s ba-toolchain ${{ env.SDK_DIR }}/Tools/ba-elf-ba2-r36379
       - name: Install xmltodict
@@ -24,13 +24,13 @@ jobs:
             make -j$(($(nproc)+1)) -C $BUILD_DIR GP_SUPPORT=$GP BAUD=$BAUD JENNIC_CHIP=$CHIP JENNIC_CHIP_FAMILY=JN516x DEBUG=$DEBUG OTA=0
             make -C $BUILD_DIR BAUD=0 clean
           done done done done
-          echo "::set-output name=status::success"
+          echo "status=success" >> $GITHUB_OUTPUT
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v2.2.2
+        uses: actions/upload-artifact@v3
         if: steps.make.outputs.status == 'success' && !cancelled()
         with:
           # Artifact name
-          name: firmwares.zip
+          name: firmwares
           # A file, directory or wildcard pattern that describes what to upload
           path: ${{ env.ARTIFACT_DIR }}/*.bin
 
@@ -38,8 +38,8 @@ jobs:
         id: tag
         if: github.ref == 'refs/heads/master' && !cancelled()
         run: |
-          echo "::set-output name=release_tag::${GITHUB_SHA::4}--$(date +"%Y%m%d-%H%M")"
-          echo "::set-output name=status::success"
+          echo "release_tag=$(echo ${GITHUB_SHA::4})--$(date +"%Y%m%d-%H%M"))" >> $GITHUB_OUTPUT
+          echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Create changelog
         id: create_changelog
