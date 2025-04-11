@@ -38,7 +38,7 @@ jobs:
         id: tag
         if: github.ref == 'refs/heads/master' && !cancelled()
         run: |
-          echo "release_tag=$(echo ${GITHUB_SHA::4})--$(date +"%Y%m%d-%H%M"))" >> $GITHUB_OUTPUT
+          echo "release_tag=$(echo ${GITHUB_SHA::4}--$(date +"%Y%m%d-%H%M"))" >> $GITHUB_OUTPUT
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Create changelog
