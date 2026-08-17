@@ -12,7 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Get toolchain
         run: mkdir -p ${{ env.SDK_DIR }}/Tools && wget https://github.com/openlumi/BA2-toolchain/releases/download/20201219/ba-toolchain-20201219.tar.bz2 -O - | tar -jx -C ${{ env.SDK_DIR }}/Tools && ln -s ba-toolchain ${{ env.SDK_DIR }}/Tools/ba-elf-ba2-r36379
       - name: Install xmltodict
@@ -26,7 +29,7 @@ jobs:
           done done done done
           echo "status=success" >> $GITHUB_OUTPUT
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: steps.make.outputs.status == 'success' && !cancelled()
         with:
           # Artifact name
@@ -44,14 +47,14 @@ jobs:
       - name: Create changelog
         id: create_changelog
         if: steps.tag.outputs.status == 'success' && !cancelled()
-        uses: heinrichreimer/github-changelog-generator-action@v2.3
+        uses: janheinrichmerker/action-github-changelog-generator@v2.4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           onlyLastTag: true
           stripHeaders: true
 
       - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
