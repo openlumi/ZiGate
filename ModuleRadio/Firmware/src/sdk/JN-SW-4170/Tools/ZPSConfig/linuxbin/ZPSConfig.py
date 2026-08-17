@@ -154,7 +154,7 @@ def calculate_channel_mask(channel_mask):
     if 'true' == channel_mask['@Channel17'].lower():
         channel_mask_value |= 0x20000
     if 'true' == channel_mask['@Channel18'].lower():
-        channel_mask_value |= 0x20000
+        channel_mask_value |= 0x40000
     if 'true' == channel_mask['@Channel19'].lower():
         channel_mask_value |= 0x80000
     if 'true' == channel_mask['@Channel20'].lower():
@@ -194,6 +194,8 @@ def find_cluster(cluster_name):
 def find_network_key(id):
     ref = id.split('->', 2)
     _, node = find_node(ref[0])
+    if node is None:
+        return None
     key_name = ref[1]
     if 'TrustCenter' in node:
         if 'Keys' in node['TrustCenter']:
@@ -226,11 +228,13 @@ def find_apdu(node, apdu_id):
 
 
 def find_node(node_name):
-    if node_name == config['ZigbeeWirelessNetwork']['Coordinator']['@Name']:
-        return 'Coordinator', config['ZigbeeWirelessNetwork']['Coordinator']
-    for name, child_node in get_child_nodes(config['ZigbeeWirelessNetwork']):
+    root = config['ZigbeeWirelessNetwork']
+    coordinator = root.get('Coordinator')
+    if coordinator is not None and node_name == coordinator['@Name']:
+        return 'Coordinator', coordinator
+    for child_node in as_list(root.get('ChildNodes', [])):
         if node_name == child_node['@Name']:
-            return name, child_node
+            return 'ChildNodes', child_node
 
     return None, None
 
@@ -332,9 +336,9 @@ def validate_configuration(node_name):
                         (cluster_id, p['@Name']))
                     return False
                 else:
-                    result = name_check.match(p['@Name'])
-                    if result.group(0) != p['@Name']:
-                        print("ERROR: Profile name '%s' is not a valid C identifier.\n" % p['@Name'])
+                    result = name_check.match(cl['@Name'])
+                    if result.group(0) != cl['@Name']:
+                        print("ERROR: Cluster name '%s' is not a valid C identifier.\n" % cl['@Name'])
                         return False
                 if cluster_id > 65535 or cluster_id < 0:
                     print(
@@ -358,7 +362,7 @@ def validate_configuration(node_name):
     all_nodes = []
     if 'Coordinator' in config['ZigbeeWirelessNetwork']:
         all_nodes.append(config['ZigbeeWirelessNetwork']['Coordinator'])
-    all_nodes.extend([v for k, v in get_child_nodes(config['ZigbeeWirelessNetwork'])])
+    all_nodes.extend(as_list(config['ZigbeeWirelessNetwork'].get('ChildNodes', [])))
     for node in all_nodes:
         if '@Name' not in node:
             print('ERROR: A node in the input configuration file does not have a Name attribute.\n')
@@ -799,14 +803,13 @@ def validate_configuration(node_name):
                     print("ERROR: APSPollPeriod is not set for node '%s'\n" % node_name)
                     return False
                 else:
-                    ftpp = int(found_node['@APSAckPollPeriod'], 0)
-                    if ftpp < 25:
+                    poll_period = int(found_node['@APSPollPeriod'], 0)
+                    if poll_period < 25:
                         print("ERROR: The APSPollPeriod for node '%s' must be at least 25ms.\n" % node_name)
                         return False
-                print(
-                    'NumPollFailuresBeforeRejoin' in found_node or
-                    "ERROR: NumPollFailuresBeforeRejoin is not set for node '%s'\n" % node_name)
-                return False
+                if '@NumPollFailuresBeforeRejoin' not in found_node:
+                    print("ERROR: NumPollFailuresBeforeRejoin is not set for node '%s'\n" % node_name)
+                    return False
             else:
                 npfbr = int(found_node['@NumPollFailuresBeforeRejoin'], 0)
                 if npfbr == 0:
@@ -818,7 +821,7 @@ def validate_configuration(node_name):
                 if sd < 2 or sd > 5:
                     print("ERROR: The ScanDuration for node '%s' must be in the range 2-5\n" % node_name)
                     return False
-    return
+    return True
 
 
 def output_c(output_dir, config_node_name, config_node, endian):
@@ -1351,7 +1354,7 @@ def output_c(output_dir, config_node_name, config_node, endian):
             index_to_check = int(interface['@index'])
             count_index = 0
             for interface1 in as_list(config_node['MacInterfaceList']['MacInterface']):
-                if index_to_check == interface1['@index']:
+                if index_to_check == int(interface1['@index']):
                     count_index += 1
                 if count_index > 1:
                     print('ERROR: MAC interfaces should have unique index.\n')
@@ -1786,7 +1789,7 @@ def output_c(output_dir, config_node_name, config_node, endian):
             )
             c_file.write(
                 'PRIVATE uint8 s_au8Endpoint%dInputClusterDiscFlags[%d] = { %s };\n' %
-                (endpoint_id, (num_input_clusters + 7) / 8, in_disc_flags),
+                (endpoint_id, (num_input_clusters + 7) // 8, in_disc_flags),
             )
             c_file.write('\n')
         if num_output_clusters > 0:
@@ -1796,7 +1799,7 @@ def output_c(output_dir, config_node_name, config_node, endian):
             )
             c_file.write(
                 'PRIVATE uint8 s_au8Endpoint%dOutputClusterDiscFlags[%d] = { %s };\n' %
-                (endpoint_id, (num_output_clusters + 7) / 8, out_disc_flags),
+                (endpoint_id, (num_output_clusters + 7) // 8, out_disc_flags),
             )
             c_file.write('\n')
 
@@ -2162,7 +2165,7 @@ def output_c(output_dir, config_node_name, config_node, endian):
     elif config_node_name == 'ChildNodes' and 'EndDevice' == from_ns(config_node['@type']):
         c_file.write('    %d,\n' % int(config_node['@ActiveNeighbourTableSize'], 0))
     else:
-        c_file.write('    %d,\n' % (int(config_node['@ActiveNeighbourTableSize'], 0) / 6))
+        c_file.write('    %d,\n' % (int(config_node['@ActiveNeighbourTableSize'], 0) // 6))
     c_file.write('    %d\n' % int(config_node['@MacTableSize'], 0))
     c_file.write('};\n')
     c_file.write(
@@ -2273,7 +2276,7 @@ def output_c(output_dir, config_node_name, config_node, endian):
     c_file.write('        &s_sNodePowerDescriptor,\n')
     c_file.write('        %d,\n' % len(as_list(config_node['Endpoints'])))
     c_file.write('        s_asSimpleDescConts,\n')
-    if '@UserDescriptor' in config_node:
+    if 'UserDescriptor' in config_node:
         c_file.write('        &s_sUserDescriptor,\n')
     else:
         c_file.write('        NULL,\n')
@@ -2509,7 +2512,7 @@ def output_header(dir, config_node_name, config_node):
     h_file.write('#define ZPS_NWK_OPT_ALL\n')
     if 'Coordinator' == config_node_name:
         h_file.write('#define ZPS_COORDINATOR\n')
-    elif 'Childnodes' == config_node_name:
+    elif 'ChildNodes' == config_node_name:
         if 'Router' == from_ns(config_node['@type']):
             h_file.write('#define ZPS_ROUTER\n')
         elif 'EndDevice' == from_ns(config_node['@type']):
@@ -2807,7 +2810,7 @@ exe_fsp = os.path.abspath(sys.executable)
 if os.name == 'nt':
     d = win32api.GetFileVersionInfo(exe_fsp, '\\')
     version = '%d.%d.%d' % (
-        d['FileVersionMS'] / (256 * 256), d['FileVersionMS'] % (256 * 256), d['FileVersionLS'] / (256 * 256))
+        d['FileVersionMS'] // (256 * 256), d['FileVersionMS'] % (256 * 256), d['FileVersionLS'] // (256 * 256))
 else:
     version = 'x.x.x'
 if '' == options.zigbee_node_name:
@@ -2824,12 +2827,13 @@ if options.optional_features:
     with open(options.config_filename, 'rb') as f:
         config = xmltodict.parse(f, process_namespaces=True, namespaces=namespaces)
     _, node = find_node(options.zigbee_node_name)
-    if '@InterPAN' in node:
-        if 'true' == node['@InterPAN'].lower():
-            optional_features |= 1
-    if '@GreenPowerSupport' in node:
-        if 'true' == node['@GreenPowerSupport'].lower():
-            optional_features |= 2
+    if node is not None:
+        if '@InterPAN' in node:
+            if 'true' == node['@InterPAN'].lower():
+                optional_features |= 1
+        if '@GreenPowerSupport' in node:
+            if 'true' == node['@GreenPowerSupport'].lower():
+                optional_features |= 2
     print(optional_features)
     sys.exit(0)
 print('ZPSConfig - Zigbee Protocol Stack Configuration Tool v%s Build %s\n' % (version, '93315M'))
