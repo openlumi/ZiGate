@@ -90,6 +90,10 @@
 #include "app_ota_server.h"
 #endif
 
+#ifdef OCB_TYPED_SUPPORT
+#include "ocb_experimental.h"
+#endif
+
 
 /****************************************************************************/
 /***    Macro Definitions                         ***/
@@ -2639,6 +2643,60 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                 ZTIMER_eStart( u8IdTimer, ZTIMER_TIME_MSEC ( 1 ) );
             }
             break;
+
+#ifdef OCB_TYPED_SUPPORT
+            case (E_SL_MSG_OCB_EXPORT_BEGIN_REQ):
+                OCB_vHandleExportBegin(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case (E_SL_MSG_OCB_EXPORT_CORE_REQ):
+                OCB_vHandleExportCore(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case (E_SL_MSG_OCB_EXPORT_LINK_KEY_REQ):
+                OCB_vHandleExportLinkKey(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case (E_SL_MSG_OCB_EXPORT_END_REQ):
+                OCB_vHandleExportEnd(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case (E_SL_MSG_OCB_STATUS_REQ):
+                OCB_vHandleStatus(u16PacketLength, au8LinkRxBuffer);
+            break;
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+            case E_SL_MSG_OCBEXP_CHALLENGE_REQ:
+                OCBEXP_vHandleChallenge(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_UNLOCK_REQ:
+                OCBEXP_vHandleUnlock(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_SECRET_CORE_REQ:
+                OCBEXP_vHandleSecretCore(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_LINK_KEY_REQ:
+                OCBEXP_vHandleLinkKey(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_RESTORE_BEGIN_REQ:
+                OCBEXP_vHandleRestoreBegin(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_RESTORE_CORE_REQ:
+                OCBEXP_vHandleRestoreField(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_RESTORE_LINK_REQ:
+                OCBEXP_vHandleRestoreLink(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_VALIDATE_REQ:
+                OCBEXP_vHandleValidate(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_COMMIT_REQ:
+                OCBEXP_vHandleCommit(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_STATUS_REQ:
+                OCBEXP_vHandleStatus(u16PacketLength, au8LinkRxBuffer);
+            break;
+            case E_SL_MSG_OCBEXP_ABORT_REQ:
+                OCBEXP_vHandleAbort(u16PacketLength, au8LinkRxBuffer);
+            break;
+#endif /* OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL */
+#endif /* OCB_TYPED_SUPPORT */
+
             default:
                     u8Status = E_SL_MSG_STATUS_UNHANDLED_COMMAND;
             break;
