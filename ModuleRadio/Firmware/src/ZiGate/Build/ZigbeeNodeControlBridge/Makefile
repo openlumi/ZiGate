@@ -108,6 +108,25 @@ NETWORK_RECOVERY       ?= 0
 STACK_MEASURE          ?= 0
 APP_AHI_CONTROL        ?= 1
 
+# Open Coordinator Backup (OCB) export/restore -- ported from
+# zigate-jn5169-firmware, self-contained in ocb_experimental.c (no
+# custom_diag.c dependency, which does not exist in this tree).
+# OCB_TYPED_SUPPORT: always-on, read-only typed metadata export, no keys.
+# OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL: default-off, exports/restores network
+# and link keys plus identity over trusted local UART; not hardware-qualified.
+OCB_TYPED_SUPPORT                   ?= 1
+OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL ?= 0
+
+ifeq ($(OCB_TYPED_SUPPORT),1)
+CFLAGS += -DOCB_TYPED_SUPPORT
+endif
+ifeq ($(OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL),1)
+ifneq ($(OCB_TYPED_SUPPORT),1)
+$(error OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL requires OCB_TYPED_SUPPORT)
+endif
+CFLAGS += -DOCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+endif
+
 ###############################################################################
 
 CFLAGS  += -DUART_BAUD_RATE=$(BAUD)
@@ -221,6 +240,10 @@ APPSRC += pdum_apdu.S
 APPSRC += app_ota_server.c
 ifeq ($(JENNIC_CHIP_FAMILY),JN517x)
 APPSRC += AHI_ModuleConfiguration.c
+endif
+
+ifeq ($(OCB_TYPED_SUPPORT),1)
+APPSRC += ocb_experimental.c
 endif
 
 ifeq ($(NETWORK_RECOVERY), 1)

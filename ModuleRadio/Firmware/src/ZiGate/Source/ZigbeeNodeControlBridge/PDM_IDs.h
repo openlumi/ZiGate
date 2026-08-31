@@ -69,6 +69,15 @@ extern "C" {
 
 #define PDM_ID_APP_VERSION                  0x10
 
+/* Adopted coordinator IEEE/EUI64 staged by an experimental OCB restore. Only
+ * written/read when OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL=1; the bare macro has
+ * no effect on the default image. Applied at boot by
+ * OCBEXP_vApplyAdoptedIeeeAtBoot() via ZPS_vSetOverrideLocalIeeeAddr() -- see
+ * that function in ocb_experimental.c for this port's boot-ordering
+ * verification status (independently re-derived for this repo's SDK, not
+ * copied from zigate-jn5169-firmware). */
+#define PDM_ID_APP_OCB_ADOPT_IEEE           0x12
+
 #define PDM_ID_INTERNAL_AIB                 0xf000
 #define PDM_ID_INTERNAL_BINDS               0xf001
 #define PDM_ID_INTERNAL_GROUPS              0xf002
@@ -81,6 +90,19 @@ extern "C" {
 #define PDM_ID_INTERNAL_NWK_ADDRESS_MAP     0xf103
 #define PDM_ID_INTERNAL_ADDRESS_MAP_TABLE   0xf104
 #define PDM_ID_INTERNAL_SEC_MATERIAL_KEY    0xf105
+/* Undocumented in the public SDK headers; identified by disassembling this
+ * repo's own libZPSNWK_JN516x.a (vIncrementFrameCounterInPdm /
+ * ZPS_pvNwkRestoreFrameCounter in zps_nwk_nib.o) -- same record id as
+ * zigate-jn5169-firmware's SDK, independently confirmed, not assumed. This is
+ * a PDM *bitmap* record (PDM_eCreateBitmap / PDM_eIncrementBitmap /
+ * PDM_eGetBitmap, NOT PDM_eSaveRecordData): the SDK persists the NWK outgoing
+ * frame counter only periodically, every 1<<g_u32NwkFcSaveCountBitShift
+ * increments (that symbol is a plain extern const uint32 on this SDK, not a
+ * function), and on boot reconstructs sTbl.u32OutFC as PDM_eGetBitmap's
+ * bitmap-value output left-shifted by that same amount.
+ * PDM_ID_INTERNAL_SEC_MATERIAL_KEY (0xf105) does NOT carry the counter --
+ * ZPS_tsNwkSecMaterialSet has no such field. */
+#define PDM_ID_INTERNAL_NWK_OUT_FC_BITMAP   0xf106
 
 #ifdef  CLD_GREENPOWER
 #define PDM_ID_APP_CLD_GP_TRANS_TABLE       (0xA103)

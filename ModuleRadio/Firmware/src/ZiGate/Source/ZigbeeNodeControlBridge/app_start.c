@@ -77,6 +77,10 @@
 
 #include "rnd_pub.h"
 
+#ifdef OCB_TYPED_SUPPORT
+#include "ocb_experimental.h"
+#endif
+
 #ifdef STACK_MEASURE
 #include "StackMeasure.h"
 #endif
@@ -162,7 +166,11 @@ uint8 u8GPZCLTimerEvent;
 #define TX_QUEUE_SIZE                                              150
 #define RX_QUEUE_SIZE                                              150
 #define BDB_QUEUE_SIZE                                             2
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+#define APP_NUM_STD_TMRS                                           5
+#else
 #define APP_NUM_STD_TMRS                                           4
+#endif
 
 #define APP_ZTIMER_STORAGE                                         (APP_NUM_STD_TMRS + APP_NUM_GP_TMRS)
 
@@ -196,6 +204,9 @@ void vReportException ( char*    sExStr );
 
 void vfExtendedStatusCallBack ( ZPS_teExtendedStatus    eExtendedStatus );
 PRIVATE void vInitialiseApp ( void );
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+PRIVATE void vOCBExpBootSettleDelay ( void );
+#endif
 
 #if (defined PDM_EEPROM && DBG_ENABLE)
 PRIVATE void vPdmEventHandlerCallback ( uint32                  u32EventNumber,
@@ -269,6 +280,12 @@ uint8                     u8IdTimer;
 uint8                     u8TmrToggleLED;
 uint8                     u8HaModeTimer;
 uint8                     u8TickTimer;
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+/* Dedicated ZTimer for the OCB experimental unlock deadline -- see
+ * ocb_experimental.c/.h. Not raw tick-timer arithmetic, since ZTimer.c
+ * already owns the AHI hardware Tick Timer as its own periodic tick source. */
+uint8                     u8OcbUnlockTimer;
+#endif
 uint8                     u8JoinedDevice =  0;
 uint8                     au8LinkRxBuffer[270];
 ZPS_tsAfFlashInfoSet      sSet;
@@ -520,12 +537,36 @@ PUBLIC tsZllGroupInfoTable * psGetGroupRecordTable(void)
  * void
  *
  ****************************************************************************/
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+/* Empirical mitigation carried over from zigate-jn5169-firmware for a
+ * factory-new/erased-PDM boot crash that repo saw with this feature compiled
+ * in: a short busy-wait before PDM_eInitialise() on its FIRST post-reset
+ * EEPROM operation, theorised (there, disassembly-backed but NOT proven) to
+ * race the EEPROM controller's post-reset settle time. NOT independently
+ * re-verified against this repo's SDK/hardware -- ported as a cheap,
+ * theoretically-harmless starting point (it sits at the same call site
+ * relative to PDM_eInitialise() either way), not because the same crash has
+ * been reproduced here. Re-run the erase-PDM/reboot HIL reliability cycle on
+ * this port before trusting (or removing) this. */
+PRIVATE void vOCBExpBootSettleDelay(void)
+{
+    volatile uint32 u32Count = 200000UL;
+    while (u32Count != 0U)
+    {
+        u32Count--;
+    }
+}
+#endif
+
 PRIVATE void vInitialiseApp ( void )
 {
     uint16            u16DataBytesRead;
     BDB_tsInitArgs    sArgs;
     uint8             u8DeviceType;
 
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+    vOCBExpBootSettleDelay();
+#endif
     PDM_eInitialise ( 63 );
     //APP_MigratePDM();
     PDUM_vInit ( );
@@ -585,6 +626,15 @@ PRIVATE void vInitialiseApp ( void )
         ZPS_vNwkNibSetPanId (ZPS_pvAplZdoGetNwkHandle(), (uint16) RND_u32GetRand ( 1, 0xfff0 ) );
 
     }
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+    /* See the large comment on OCBEXP_vApplyAdoptedIeeeAtBoot() in
+     * ocb_experimental.c for this port's independently re-derived evidence
+     * and the placement rationale/caveat -- this call site (after every
+     * ZPS_eAplAfInit() branch) mirrors zigate-jn5169-firmware's HIL-verified
+     * placement as a starting point, not a re-proven requirement on this
+     * SDK. */
+    OCBEXP_vApplyAdoptedIeeeAtBoot();
+#endif
     //Envoie message Start after PDM loaded
     uint8_t au8values[1];
     uint8_t u8Length=0;
@@ -726,6 +776,9 @@ PUBLIC void APP_vInitResources ( void )
     ZTIMER_eOpen ( &u8IdTimer,         APP_vIdentifyEffectEnd,      NULL,                      ZTIMER_FLAG_PREVENT_SLEEP );
     ZTIMER_eOpen ( &u8TmrToggleLED,    APP_cbToggleLED,             &s_sLedState,              ZTIMER_FLAG_PREVENT_SLEEP );
     ZTIMER_eOpen ( &u8HaModeTimer,     App_TransportKeyCallback,    &u64CallbackMacAddress,    ZTIMER_FLAG_PREVENT_SLEEP );
+#ifdef OCB_KEY_EXPORT_RESTORE_EXPERIMENTAL
+    ZTIMER_eOpen ( &u8OcbUnlockTimer,  OCBEXP_vUnlockTimeout,       NULL,                      ZTIMER_FLAG_PREVENT_SLEEP );
+#endif
 
 #ifdef CLD_GREENPOWER
     ZTIMER_eOpen(&u8GPTimerTick,       APP_cbTimerGPZclTick,        NULL, 					   ZTIMER_FLAG_PREVENT_SLEEP );
