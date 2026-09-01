@@ -39,19 +39,19 @@ jobs:
 
       - name: Generate release tag
         id: tag
-        if: github.ref == 'refs/heads/master' && !cancelled()
+        if: github.ref_type == 'branch' && !cancelled()
         run: |
           echo "release_tag=$(echo $(date +"%Y%m%d-%H%M")--${GITHUB_SHA::4})" >> $GITHUB_OUTPUT
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Create changelog
-        id: create_changelog
+      - name: Generate release notes
         if: steps.tag.outputs.status == 'success' && !cancelled()
-        uses: janheinrichmerker/action-github-changelog-generator@v2.4
+        uses: orhun/git-cliff-action@v4.8.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          onlyLastTag: true
-          stripHeaders: true
+          config: cliff.toml
+          args: --unreleased
+        env:
+          OUTPUT: CHANGELOG.md
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v3
@@ -60,6 +60,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
-          body: ${{ steps.create_changelog.outputs.changelog }}
+          body_path: CHANGELOG.md
           files: ${{ env.ARTIFACT_DIR }}/*.bin
           prerelease: true

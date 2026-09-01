@@ -1,0 +1,27 @@
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }} (`{{ commit.id | truncate(length=7, end="") }}`)
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = false
+filter_commits = false
+
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^docs?", group = "Documentation" },
+  { message = "^(chore|ci|build|refactor|test)", group = "Maintenance" },
+  { message = ".*", group = "Other Changes" },
+]
+
+# Match both the current timestamp--SHA tags and the older SHA--timestamp tags.
+tag_pattern = ".*--.*"
