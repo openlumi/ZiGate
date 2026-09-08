@@ -47,6 +47,7 @@
 
 void vApp_GP_RegisterDevice(tfpZCL_ZCLCallBackFunction fptrEPCallBack);
 void vApp_GP_EnterCommissioningMode(void);
+void vApp_GP_SetCommissioningMode(bool_t bEnter);
 void vAPP_GP_LoadPDMData(void);
 void vHandleGreenPowerEvent(tsGP_GreenPowerCallBackMessage *psGPMessage);
 void vAPP_GP_ResetData(void);

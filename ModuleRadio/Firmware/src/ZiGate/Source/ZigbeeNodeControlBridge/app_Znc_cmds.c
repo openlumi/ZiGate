@@ -90,6 +90,10 @@
 #include "app_ota_server.h"
 #endif
 
+#ifdef CLD_GREENPOWER
+#include "app_green_power.h"
+#endif
+
 #ifdef OCB_TYPED_SUPPORT
 #include "ocb_experimental.h"
 #endif
@@ -1023,6 +1027,15 @@ PUBLIC void APP_vProcessIncomingSerialCommands ( uint8    u8RxByte )
                                                           au8LinkRxBuffer[3],
                                                           &u8SeqNum,
                                                           &u8RequestSent );
+#ifdef CLD_GREENPOWER
+                /*
+                 * A ZiGate broadcast does not loop back into its own GP
+                 * endpoint.  Open the local proxy explicitly when the host
+                 * requests permit join, so unknown GPD commissioning frames
+                 * reach the serial DataIndication path.
+                 */
+                vApp_GP_SetCommissioningMode(au8LinkRxBuffer[2] != 0);
+#endif
             }
             break;
 

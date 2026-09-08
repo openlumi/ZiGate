@@ -80,6 +80,7 @@
 #endif
 
 #ifdef CLD_GREENPOWER
+#include "GreenPower.h"
 #include "app_green_power.h"
 #endif
 
@@ -89,6 +90,10 @@
 
 #ifndef TRACE_APP
 #define TRACE_APP TRUE
+#endif
+
+#ifdef CLD_GREENPOWER
+#define ZNC_GP_DATA_HEADER_SIZE       27U
 #endif
 
 /****************************************************************************/
@@ -118,6 +123,87 @@ uint32    sStorage;
 PRIVATE bool_t    bAddrMode;
 #endif
 extern tsLedState    s_sLedState;
+
+#ifdef CLD_GREENPOWER
+/****************************************************************************
+ * NAME: Znc_vSendGreenPowerDataIndicationToHost
+ *
+ * DESCRIPTION:
+ * Serialize a native ZGP data indication for the ZiGate host adapter.
+ *
+ * Green Power indications do not have ordinary APS source and destination
+ * addresses.  They therefore use a dedicated serial message which keeps
+ * the native GP metadata intact.  The host adapter reconstructs the
+ * canonical GP ZCL payload from this stable, explicitly serialized format.
+ ****************************************************************************/
+PUBLIC void Znc_vSendGreenPowerDataIndicationToHost(
+                                            ZPS_tsAfEvent *psStackEvent)
+{
+    uint8 au8LinkTxBuffer[256];
+    uint16 u16Length = 0;
+    uint8 *pu8Payload;
+    uint16 u16PayloadSize;
+    ZPS_tsAfZgpDataIndEvent *psGpEvent =
+        &psStackEvent->uEvent.sApsZgpDataIndEvent;
+
+    pu8Payload = (uint8 *)PDUM_pvAPduInstanceGetPayload(
+        psGpEvent->hAPduInst);
+    u16PayloadSize = PDUM_u16APduInstanceGetPayloadSize(
+        psGpEvent->hAPduInst);
+
+    if (u16PayloadSize > (sizeof(au8LinkTxBuffer) -
+                          ZNC_GP_DATA_HEADER_SIZE))
+    {
+        DBG_vPrintf(TRACE_APP,
+                    "GP DataIndication payload too large: %d\n",
+                    u16PayloadSize);
+        return;
+    }
+
+    /* Keep this order in sync with the ZiGate host message definition. */
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8Status, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8SeqNum, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u2ApplicationId, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u2SecurityLevel, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u2SecurityKeyType, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->bAutoCommissioning, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->bRxAfterTx, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8FrameType, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8SrcAddrMode, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   psGpEvent->u8Rssi, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8LinkQuality, u16Length);
+    ZNC_BUF_U16_UPD(&au8LinkTxBuffer[u16Length],
+                    psGpEvent->u16SrcPanId, u16Length);
+    ZNC_BUF_U32_UPD(&au8LinkTxBuffer[u16Length],
+                    psGpEvent->uGpAddress.u32SrcId, u16Length);
+    ZNC_BUF_U32_UPD(&au8LinkTxBuffer[u16Length],
+                    psGpEvent->u32SecFrameCounter, u16Length);
+    ZNC_BUF_U32_UPD(&au8LinkTxBuffer[u16Length],
+                    psGpEvent->u32Mic, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)psGpEvent->u8CommandId, u16Length);
+    ZNC_BUF_U8_UPD(&au8LinkTxBuffer[u16Length],
+                   (uint8)u16PayloadSize, u16Length);
+    memcpy(&au8LinkTxBuffer[u16Length], pu8Payload, u16PayloadSize);
+    u16Length += u16PayloadSize;
+
+    vSL_WriteMessage(E_SL_MSG_GREENPOWER_DATA_INDICATION,
+                     u16Length,
+                     au8LinkTxBuffer,
+                     (uint8)psGpEvent->u8LinkQuality);
+}
+#endif
 extern uint8         u8JoinedDevice;
 
 /****************************************************************************/
@@ -497,6 +583,18 @@ PUBLIC void APP_vHandleStackEvents ( ZPS_tsAfEvent*    psStackEvent )
 
     switch (psStackEvent->eType)
     {
+#ifdef CLD_GREENPOWER
+        case ZPS_EVENT_APS_ZGP_DATA_INDICATION:
+            Znc_vSendGreenPowerDataIndicationToHost(psStackEvent);
+            vZCL_HandleZgpDataIndication(psStackEvent,
+                                          GREENPOWER_END_POINT_ID);
+            break;
+
+        case ZPS_EVENT_APS_ZGP_DATA_CONFIRM:
+            vZCL_HandleZgpDataConfirm(psStackEvent,
+                                      GREENPOWER_END_POINT_ID);
+            break;
+#endif
 		case ZPS_EVENT_APS_DATA_ACK:
 		{
 			vLog_Printf(TRACE_APP,LOG_DEBUG, "\nACK: SEP=%d DEP=%d Profile=%04x Cluster=%04x\n",

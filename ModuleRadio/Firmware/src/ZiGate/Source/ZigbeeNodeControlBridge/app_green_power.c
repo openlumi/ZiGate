@@ -283,6 +283,37 @@ void vApp_GP_EnterCommissioningMode(void)
     DBG_vPrintf(TRACE_APP_GP, "eGP_ProxyCommissioningMode returned status 0x%x", u8Status);
 
 }
+
+/****************************************************************************
+ * NAME: vApp_GP_SetCommissioningMode
+ *
+ * DESCRIPTION:
+ * Explicitly set the local GP proxy commissioning state.
+ *
+ * The host permit-join command is also used by Zigbee2MQTT to open the GP
+ * commissioning window.  A separate setter is used here instead of the
+ * legacy button-style toggle above, so repeated permit-join requests cannot
+ * accidentally close an already open GP window.
+ ****************************************************************************/
+void vApp_GP_SetCommissioningMode(bool_t bEnter)
+{
+    tsZCL_Address sDestinationAddress;
+    teGP_GreenPowerProxyCommissionMode eMode;
+    teZCL_Status eStatus;
+
+    sDestinationAddress.eAddressMode = E_ZCL_AM_BROADCAST;
+    sDestinationAddress.uAddress.eBroadcastMode = ZPS_E_APL_AF_BROADCAST_RX_ON;
+    eMode = bEnter ? E_GP_PROXY_COMMISSION_ENTER : E_GP_PROXY_COMMISSION_EXIT;
+
+    eStatus = eGP_ProxyCommissioningMode(
+                    GREENPOWER_END_POINT_ID,
+                    GREENPOWER_END_POINT_ID,
+                    sDestinationAddress,
+                    eMode);
+    DBG_vPrintf(TRACE_APP_GP,
+                "GP proxy commissioning %s status 0x%x\n",
+                bEnter ? "enter" : "exit", eStatus);
+}
 /****************************************************************************
  * NAME: vAPP_GP_LoadPDMData
  *

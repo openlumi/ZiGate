@@ -246,6 +246,11 @@ void APP_vHandleZclEvents ( ZPS_tsAfEvent*    psStackEvent )
 
     switch ( psStackEvent->eType )
     {
+#ifdef CLD_GREENPOWER
+        case ZPS_EVENT_APS_ZGP_DATA_INDICATION:
+            Znc_vSendGreenPowerDataIndicationToHost(psStackEvent);
+            break;
+#endif
 
         case ZPS_EVENT_APS_DATA_INDICATION:
             if (sZllState.u8RawMode == RAW_MODE_HYBRID)

@@ -202,6 +202,10 @@ PUBLIC void APP_vSendDataIndicationToHost( ZPS_tsAfEvent *psStackEvent,
                                            uint8* pau8StatusBuffer);
 PUBLIC void Znc_vSendDataIndicationToHost( ZPS_tsAfEvent *psStackEvent,
                                            uint8* pau8StatusBuffer);
+#ifdef CLD_GREENPOWER
+PUBLIC void Znc_vSendGreenPowerDataIndicationToHost(
+                                           ZPS_tsAfEvent *psStackEvent);
+#endif
 PUBLIC void APP_vSaveAllRecords(void);
 PUBLIC void APP_vSendJoinedFormEventToHost ( uint8    u8FormJoin,
                                              uint8    *pu8Buffer );

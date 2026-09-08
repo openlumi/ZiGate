@@ -132,6 +132,7 @@ typedef enum
 
     E_SL_MSG_GET_TIMESERVER                                       =   0x0017,
     E_SL_MSG_GET_TIMESERVER_LIST                               =   0x8017,
+    E_SL_MSG_GREENPOWER_DATA_INDICATION                         =   0x8018,
 
     E_SL_MSG_SET_LED                                           =   0x0018,
     E_SL_MSG_SET_CE_FCC                                           =   0x0019,
